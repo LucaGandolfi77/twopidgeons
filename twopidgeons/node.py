@@ -13,10 +13,13 @@ from .crypto_utils import (
     encrypt_data_hybrid, decrypt_data_hybrid
 )
 import time
+from collections import defaultdict
+from typing import Callable, List, Any
 
 class Node:
     def __init__(self, node_id: str, storage_dir: str):
         self.node_id = node_id
+        self._events = defaultdict(list) # Event registry
 
         self.storage_dir = storage_dir
         self.nodes = set() # Set of peer nodes (e.g., 'http://192.168.0.5:5000')
@@ -42,6 +45,37 @@ class Node:
             save_key_to_file(self.public_key, self.public_key_path, is_private=False)
             
         self.public_key_pem = serialize_public_key(self.public_key)
+
+    # --- Event System ---
+    def on(self, event_name: str):
+        """Decorator to register an event listener."""
+        def decorator(func: Callable):
+            self._events[event_name].append(func)
+            return func
+        return decorator
+
+    def emit(self, event_name: str, *args, **kwargs):
+        """Emits an event to all registered listeners."""
+        for listener in self._events[event_name]:
+            try:
+                listener(*args, **kwargs)
+            except Exception as e:
+                print(f"Error in event listener for '{event_name}': {e}")
+
+    # --- Wrappers with Events ---
+    def mine_block(self) -> int:
+        """Mines a new block and emits 'block_mined' event."""
+        index = self.blockchain.mine()
+        if index != -1:
+            self.emit("block_mined", self.blockchain.last_block)
+        return index
+
+    def add_transaction(self, transaction_data: dict) -> bool:
+        """Adds a transaction and emits 'transaction_received' event."""
+        success = self.blockchain.add_new_transaction(transaction_data)
+        if success:
+            self.emit("transaction_received", transaction_data)
+        return success
 
     def register_node(self, address: str):
         """Adds a new node to the list of peers."""
@@ -211,8 +245,9 @@ class Node:
         
         transaction_data['signature'] = signature
         
-        self.blockchain.add_new_transaction(transaction_data)
-        self.blockchain.mine()
+        # Use wrapper methods to trigger events
+        self.add_transaction(transaction_data)
+        self.mine_block()
         
         # After mining, broadcast the new block to the network
         self.broadcast_block(self.blockchain.last_block)

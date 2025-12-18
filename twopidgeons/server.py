@@ -97,9 +97,10 @@ class P2PServer:
                 "signature": "", 
                 "timestamp": time.time()
             }
-            self.node.blockchain.add_new_transaction(reward_transaction)
+            # Use node wrapper to trigger events
+            self.node.add_transaction(reward_transaction)
 
-            block_index = self.node.blockchain.mine()
+            block_index = self.node.mine_block()
             
             if block_index == -1:
                 raise HTTPException(status_code=400, detail="Nessuna transazione da minare (eccetto reward)")
@@ -124,7 +125,8 @@ class P2PServer:
             tx_data = transaction.dict(exclude_none=True)
             tx_data['timestamp'] = time.time()
             
-            success = self.node.blockchain.add_new_transaction(tx_data)
+            # Use node wrapper to trigger events
+            success = self.node.add_transaction(tx_data)
             
             if not success:
                 raise HTTPException(status_code=400, detail="Transazione non valida")
