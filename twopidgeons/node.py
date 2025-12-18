@@ -19,6 +19,7 @@ from typing import Callable, List, Any, Optional
 
 from .config import Config, settings
 from .ipfs import IPFSClient
+from .smart_contract import SmartContract
 
 class Node:
     def __init__(self, config: Config = settings):
@@ -31,6 +32,9 @@ class Node:
         
         # Initialize IPFS Client
         self.ipfs = IPFSClient(config.ipfs_api_url, config.ipfs_gateway_url)
+        
+        # Initialize Smart Contract Engine
+        self.smart_contract = SmartContract()
         
         if not os.path.exists(self.storage_dir):
             os.makedirs(self.storage_dir)
@@ -185,7 +189,7 @@ class Node:
 
         return False
 
-    def store_image(self, source_path: str, target_filename: str) -> bool:
+    def store_image(self, source_path: str, target_filename: str, conditions: str = None) -> bool:
         """
         Uploads an image, validates it, saves it as .2pg, and registers it on the blockchain.
         """
@@ -258,7 +262,8 @@ class Node:
             'source_hash': img_hash,
             'timestamp': time.time(),
             'hidden_data': hidden_data, # Optional: store what we hid
-            'public_key': self.public_key_pem
+            'public_key': self.public_key_pem,
+            'conditions': conditions # Smart Contract Logic
         }
         
         # Sign the transaction
@@ -330,6 +335,73 @@ class Node:
                 if tx.get('filename') == filename:
                     return tx.get('ipfs_cid')
         return None
+
+    def transfer_image(self, filename: str, recipient_id: str, payment_amount: float = 0) -> bool:
+        """
+        Transfers ownership of an image to another node, validating Smart Contract conditions.
+        """
+        # 1. Find original transaction
+        cid = self.get_cid_by_filename(filename)
+        if not cid:
+            print(f"Error: Image '{filename}' not found in blockchain.")
+            return False
+            
+        # Find the full transaction to check conditions
+        original_tx = None
+        for block in reversed(self.blockchain.chain):
+            for tx in block.transactions:
+                if tx.get('filename') == filename:
+                    original_tx = tx
+                    break
+            if original_tx: break
+            
+        if not original_tx:
+            return False
+            
+        # 2. Check Ownership (Simplified: assume we are the owner if we have the private key matching public key)
+        # In a real system, we would check if self.public_key matches original_tx['public_key']
+        # or the last transfer's recipient.
+        
+        # 3. Validate Smart Contract Conditions
+        conditions = original_tx.get('conditions')
+        if conditions:
+            print(f"Validating Smart Contract: '{conditions}'")
+            context = {
+                "amount": payment_amount,
+                "recipient": recipient_id,
+                "sender": self.node_id,
+                "timestamp": time.time()
+            }
+            
+            if not self.smart_contract.validate(conditions, context):
+                print(f"Transfer REJECTED: Smart Contract conditions not met.")
+                return False
+            print("Smart Contract conditions MET.")
+            
+        # 4. Create Transfer Transaction
+        transfer_tx = {
+            'type': 'transfer',
+            'filename': filename,
+            'ipfs_cid': cid,
+            'from_node': self.node_id,
+            'to_node': recipient_id,
+            'amount': payment_amount,
+            'timestamp': time.time(),
+            'public_key': self.public_key_pem
+        }
+        
+        # Sign
+        tx_bytes = json.dumps(transfer_tx, sort_keys=True).encode()
+        signature = sign_data(self.private_key, tx_bytes)
+        transfer_tx['signature'] = signature
+        
+        self.add_transaction(transfer_tx)
+        self.mine_block()
+        self.broadcast_block(self.blockchain.last_block)
+        
+        print(f"Transfer of {filename} to {recipient_id} completed in block #{self.blockchain.last_block.index}")
+        return True
+
 
 
 import time

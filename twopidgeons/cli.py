@@ -12,6 +12,15 @@ def main():
     parser_store.add_argument("name", help="Destination name (e.g. abcde.2pg)")
     parser_store.add_argument("--node-dir", default="./node_storage", help="Node directory")
     parser_store.add_argument("--node-id", default="cli_node", help="Node ID")
+    parser_store.add_argument("--condition", help="Smart Contract condition (e.g. \"amount > 5\")")
+
+    # Command: transfer
+    parser_transfer = subparsers.add_parser("transfer", help="Transfers an image to another node")
+    parser_transfer.add_argument("name", help="Filename to transfer (e.g. abcde.2pg)")
+    parser_transfer.add_argument("recipient", help="Recipient Node ID")
+    parser_transfer.add_argument("--amount", type=float, default=0, help="Payment amount")
+    parser_transfer.add_argument("--node-dir", default="./node_storage", help="Node directory")
+    parser_transfer.add_argument("--node-id", default="cli_node", help="Node ID")
 
     # Command: validate
     parser_validate = subparsers.add_parser("validate", help="Validates a local image")
@@ -46,8 +55,12 @@ def main():
 
     if args.command == "store":
         node = Node(config=get_config(args))
-        node.store_image(args.source, args.name)
+        node.store_image(args.source, args.name, conditions=args.condition)
     
+    elif args.command == "transfer":
+        node = Node(config=get_config(args))
+        node.transfer_image(args.name, args.recipient, args.amount)
+
     elif args.command == "validate":
         # Validator needs a temporary ID if not provided, but needs correct storage dir
         cfg = get_config(args)
