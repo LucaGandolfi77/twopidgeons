@@ -5,11 +5,12 @@ import os
 from typing import List, Dict, Any
 
 class Block:
-    def __init__(self, index: int, transactions: List[Dict], timestamp: float, previous_hash: str):
+    def __init__(self, index: int, transactions: List[Dict], timestamp: float, previous_hash: str, nonce: int = 0):
         self.index = index
         self.transactions = transactions
         self.timestamp = timestamp
         self.previous_hash = previous_hash
+        self.nonce = nonce
         self.hash = self.compute_hash()
 
     def compute_hash(self) -> str:
@@ -24,6 +25,8 @@ class Block:
         return hashlib.sha256(block_string.encode()).hexdigest()
 
 class Blockchain:
+    difficulty = 4
+
     def __init__(self, chain_file: str = None):
         self.unconfirmed_transactions: List[Dict] = []
         self.chain: List[Block] = []
@@ -37,6 +40,9 @@ class Blockchain:
     def create_genesis_block(self):
         """Creates the genesis block (the first block in the chain)."""
         genesis_block = Block(0, [], 0.0, "0")
+        # Genesis block also needs to satisfy PoW or be exempt. 
+        # Usually genesis is hardcoded, but here we can just mine it to be consistent.
+        self.proof_of_work(genesis_block)
         self.chain.append(genesis_block)
         self.save_chain()
 
@@ -47,6 +53,19 @@ class Blockchain:
     def add_new_transaction(self, transaction: Dict):
         """Adds a transaction to the list of unconfirmed transactions."""
         self.unconfirmed_transactions.append(transaction)
+
+    def proof_of_work(self, block: Block) -> str:
+        """
+        Proof of Work algorithm.
+        Increments the nonce until the hash starts with 'difficulty' zeros.
+        """
+        block.nonce = 0
+        computed_hash = block.compute_hash()
+        while not computed_hash.startswith('0' * Blockchain.difficulty):
+            block.nonce += 1
+            computed_hash = block.compute_hash()
+        block.hash = computed_hash
+        return computed_hash
 
     def mine(self) -> int:
         """
@@ -62,6 +81,8 @@ class Blockchain:
                           timestamp=time.time(),
                           previous_hash=last_block.hash)
 
+        self.proof_of_work(new_block)
+        
         self.chain.append(new_block)
         self.unconfirmed_transactions = []
         self.save_chain()
@@ -92,7 +113,8 @@ class Blockchain:
                     index=block_data['index'],
                     transactions=block_data['transactions'],
                     timestamp=block_data['timestamp'],
-                    previous_hash=block_data['previous_hash']
+                    previous_hash=block_data['previous_hash'],
+                    nonce=block_data.get('nonce', 0)
                 )
                 # The hash is recalculated in the constructor, but we can verify if it matches
                 # Note: if we recalculate the hash here, it must match the saved one.
@@ -134,6 +156,9 @@ class Blockchain:
             return False
         if block.hash != block.compute_hash():
             return False
+        # Check Proof of Work
+        if not block.hash.startswith('0' * Blockchain.difficulty):
+            return False
         return True
 
     def replace_chain(self, new_chain: List[Block]) -> bool:
@@ -159,9 +184,11 @@ class Blockchain:
         return True
 
     def find_transaction(self, image_hash: str) -> Dict:
-        """Searches for a transaction based on the image hash."""
+        """Searches for a transaction based on the image hash or source hash."""
         for block in self.chain:
             for tx in block.transactions:
                 if tx.get('image_hash') == image_hash:
+                    return tx
+                if tx.get('source_hash') == image_hash:
                     return tx
         return None

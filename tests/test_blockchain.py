@@ -8,7 +8,12 @@ from twopidgeons.blockchain import Blockchain, Block
 def blockchain(tmp_path):
     # Use a temporary file for the blockchain
     chain_file = tmp_path / "test_chain.json"
-    return Blockchain(chain_file=str(chain_file))
+    # Lower difficulty for tests to speed up execution
+    original_difficulty = Blockchain.difficulty
+    Blockchain.difficulty = 1
+    bc = Blockchain(chain_file=str(chain_file))
+    yield bc
+    Blockchain.difficulty = original_difficulty
 
 def test_genesis_block(blockchain):
     assert len(blockchain.chain) == 1
@@ -65,18 +70,48 @@ def test_persistence(tmp_path):
     assert bc2.last_block.hash == bc1.last_block.hash
 
 def test_is_valid_chain_static():
-    # Create a manual valid chain
-    b0 = Block(0, [], time.time(), "0")
-    b1 = Block(1, [{"a": 1}], time.time(), b0.hash)
-    chain = [b0, b1]
+    # Lower difficulty for this test
+    old_diff = Blockchain.difficulty
+    Blockchain.difficulty = 1
     
-    assert Blockchain.is_valid_chain(chain) is True
-    
-    # Invalid genesis
-    b0_bad = Block(1, [], time.time(), "0")
-    assert Blockchain.is_valid_chain([b0_bad]) is False
-    
-    # Broken link
-    b2_bad = Block(2, [], time.time(), "wrong_hash")
+    try:
+        # Create a manual valid chain
+        b0 = Block(0, [], time.time(), "0")
+        # Mine b0
+        while not b0.hash.startswith('0'):
+            b0.nonce += 1
+            b0.hash = b0.compute_hash()
+            
+        b1 = Block(1, [{"a": 1}], time.time(), b0.hash)
+        # Mine b1
+        while not b1.hash.startswith('0'):
+            b1.nonce += 1
+            b1.hash = b1.compute_hash()
+            
+        chain = [b0, b1]
+        
+        assert Blockchain.is_valid_chain(chain) is True
+        
+        # Invalid genesis
+        b0_bad = Block(1, [], time.time(), "0")
+        # Mine b0_bad
+        while not b0_bad.hash.startswith('0'):
+            b0_bad.nonce += 1
+            b0_bad.hash = b0_bad.compute_hash()
+            
+        assert Blockchain.is_valid_chain([b0_bad]) is False
+        
+        # Broken link
+        b2_bad = Block(2, [], time.time(), "wrong_hash")
+        # Mine b2_bad
+        while not b2_bad.hash.startswith('0'):
+            b2_bad.nonce += 1
+            b2_bad.hash = b2_bad.compute_hash()
+            
+        chain_bad = [b0, b1, b2_bad]
+        assert Blockchain.is_valid_chain(chain_bad) is False
+        
+    finally:
+        Blockchain.difficulty = old_diff
     chain_bad = [b0, b1, b2_bad]
     assert Blockchain.is_valid_chain(chain_bad) is False

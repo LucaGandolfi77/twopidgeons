@@ -164,6 +164,7 @@ class Node:
             'node_id': self.node_id,
             'filename': target_filename,
             'image_hash': final_hash,
+            'source_hash': img_hash,
             'timestamp': time.time(),
             'hidden_data': hidden_data # Optional: store what we hid
         }
