@@ -198,13 +198,11 @@ class Node:
             print(f"Error: Filename '{target_filename}' is invalid. Must be 5 lowercase letters + .2pg")
             return False
 
-        # 2. Image format validation (must be compatible with JPEG)
+        # 2. Image format validation (must be compatible with JPEG/WebP)
         try:
             with Image.open(source_path) as img:
-                if img.format not in ['JPEG', 'MPO']: # MPO is similar to JPEG
-                    # Try to convert if not jpeg, or reject.
-                    # For strictness, convert to RGB and save as JPEG
-                    img = img.convert('RGB')
+                # We accept any format that PIL can open, as we convert it later
+                pass
         except Exception as e:
             print(f"Error: Source file is not a valid image. {e}")
             return False
@@ -220,15 +218,25 @@ class Node:
             print("Error: This image is already registered in the blockchain.")
             return False
 
-        # 5. Physical file saving (Temp)
+        # 5. Physical file saving (Temp) with Intelligent Compression
         temp_path = os.path.join(self.storage_dir, "temp_" + target_filename)
-        # Rewrite the file to ensure it is a valid JPEG
+        
+        # Use configured format and quality
+        fmt = self.config.image_format
+        quality = self.config.image_quality
+        
+        print(f"Compressing image (Format: {fmt}, Quality: {quality})...")
+        
         with Image.open(source_path) as img:
-            img.convert('RGB').save(temp_path, format='JPEG')
+            # Convert to RGB to ensure compatibility
+            img = img.convert('RGB')
+            # Save with optimization
+            img.save(temp_path, format=fmt, quality=quality, optimize=True)
             
         # 6. Steganography: Embed Node ID and Timestamp into the image
         hidden_data = f"Origin: {self.node_id} | Time: {time.time()}"
-        Steganography.embed(temp_path, hidden_data)
+        # Pass format and quality to ensure they are preserved during embedding save
+        Steganography.embed(temp_path, hidden_data, format=fmt, quality=quality)
         
         # 7. Encryption
         # Read the cleartext image data (with steganography)

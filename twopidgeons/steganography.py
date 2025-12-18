@@ -11,7 +11,7 @@ class Steganography:
     TAG_IMAGE_DESCRIPTION = 0x010e
 
     @staticmethod
-    def embed(image_path: str, data: str) -> bool:
+    def embed(image_path: str, data: str, format: str = 'JPEG', quality: int = 85) -> bool:
         """
         Embeds a string into the image metadata.
         """
@@ -23,8 +23,8 @@ class Steganography:
             exif[Steganography.TAG_IMAGE_DESCRIPTION] = data
             
             # Save the image with the new EXIF data
-            # Force JPEG format since .2pg is just a renamed JPEG
-            img.save(image_path, exif=exif, format='JPEG')
+            # Use optimize=True for better compression
+            img.save(image_path, exif=exif, format=format, quality=quality, optimize=True)
             return True
         except Exception as e:
             print(f"Steganography error: {e}")

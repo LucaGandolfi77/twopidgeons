@@ -29,5 +29,9 @@ class Config(BaseModel):
     ipfs_api_url: str = Field(default_factory=lambda: os.getenv("TP_IPFS_API_URL", "http://127.0.0.1:5001/api/v0"))
     ipfs_gateway_url: str = Field(default_factory=lambda: os.getenv("TP_IPFS_GATEWAY_URL", "http://127.0.0.1:8080/ipfs"))
 
+    # Compression
+    image_format: str = Field(default_factory=lambda: os.getenv("TP_IMAGE_FORMAT", "WEBP")) # 'JPEG' or 'WEBP'
+    image_quality: int = Field(default_factory=lambda: int(os.getenv("TP_IMAGE_QUALITY", "85")))
+
 # Global instance (can be overridden)
 settings = Config()
