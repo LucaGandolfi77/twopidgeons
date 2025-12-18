@@ -59,3 +59,41 @@ int check_lowercase_5(const char* str) {
     
     return result;
 }
+
+/*
+ * Checks if the first 3 bytes of the buffer match the JPEG magic number:
+ * FF D8 FF
+ */
+int check_jpeg_magic(const unsigned char* buf) {
+    int result = 0;
+    __asm__ volatile (
+        // Check 1st byte (0xFF)
+        "movzbl 0(%1), %%eax\n\t"
+        "cmpl $0xFF, %%eax\n\t"
+        "jne 1f\n\t"
+        
+        // Check 2nd byte (0xD8)
+        "movzbl 1(%1), %%eax\n\t"
+        "cmpl $0xD8, %%eax\n\t"
+        "jne 1f\n\t"
+
+        // Check 3rd byte (0xFF)
+        "movzbl 2(%1), %%eax\n\t"
+        "cmpl $0xFF, %%eax\n\t"
+        "jne 1f\n\t"
+
+        // Success
+        "movl $1, %0\n\t"
+        "jmp 2f\n\t"
+
+        // Fail
+        "1:\n\t"
+        "movl $0, %0\n\t"
+        
+        "2:"
+        : "=r" (result)
+        : "r" (buf)
+        : "eax", "cc"
+    );
+    return result;
+}

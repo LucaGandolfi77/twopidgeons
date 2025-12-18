@@ -10,6 +10,7 @@ twopidgeons/cli.py
 twopidgeons/extension.c
 twopidgeons/node.py
 twopidgeons/server.py
+twopidgeons/steganography.py
 twopidgeons/utils.py
 twopidgeons/validator.c
 twopidgeons.egg-info/PKG-INFO

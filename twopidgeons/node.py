@@ -5,10 +5,12 @@ from urllib.parse import urlparse
 from PIL import Image
 from .blockchain import Blockchain, Block
 from .utils import is_valid_filename, calculate_hash
+from .steganography import Steganography
 
 class Node:
     def __init__(self, node_id: str, storage_dir: str):
         self.node_id = node_id
+
         self.storage_dir = storage_dir
         self.nodes = set() # Set of peer nodes (e.g., 'http://192.168.0.5:5000')
         
@@ -146,19 +148,24 @@ class Node:
         # Rewrite the file to ensure it is a valid JPEG renamed to .2pg
         with Image.open(source_path) as img:
             img.convert('RGB').save(dest_path, format='JPEG')
+            
+        # 6. Steganography: Embed Node ID and Timestamp into the image
+        # We do this BEFORE calculating the final hash, so the hash includes the hidden data.
+        hidden_data = f"Origin: {self.node_id} | Time: {time.time()}"
+        Steganography.embed(dest_path, hidden_data)
         
-        # Recalculate hash of the actually saved file (might change slightly due to compression if reconverted)
-        # To be consistent with "same format as jpeg", we assume the saved file is what matters.
+        # 7. Recalculate hash of the actually saved file (with steganography)
         with open(dest_path, "rb") as f:
             final_data = f.read()
         final_hash = calculate_hash(final_data)
 
-        # 6. Blockchain Transaction Creation
+        # 8. Blockchain Transaction Creation
         transaction = {
             'node_id': self.node_id,
             'filename': target_filename,
             'image_hash': final_hash,
-            'timestamp': time.time()
+            'timestamp': time.time(),
+            'hidden_data': hidden_data # Optional: store what we hid
         }
         
         self.blockchain.add_new_transaction(transaction)
@@ -167,18 +174,26 @@ class Node:
         # After mining, broadcast the new block to the network
         self.broadcast_block(self.blockchain.last_block)
         
-        print(f"Image saved in {dest_path} and registered in block #{self.blockchain.last_block.index}")
+        print(f"Image saved in {dest_path} (with steganography) and registered in block #{self.blockchain.last_block.index}")
         return True
 
     def validate_local_image(self, filename: str) -> bool:
         """
         Verifies if a local file is valid by checking the blockchain.
+        Also checks for steganographic signature.
         """
         file_path = os.path.join(self.storage_dir, filename)
         
         if not os.path.exists(file_path):
             print("File not found locally.")
             return False
+
+        # Check Steganography
+        hidden_msg = Steganography.extract(file_path)
+        if hidden_msg:
+            print(f"Steganography found: {hidden_msg}")
+        else:
+            print("Warning: No steganographic data found.")
 
         with open(file_path, "rb") as f:
             data = f.read()

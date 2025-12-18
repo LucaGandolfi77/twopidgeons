@@ -18,6 +18,11 @@ def main():
     parser_validate.add_argument("name", help="Filename to validate (e.g. abcde.2pg)")
     parser_validate.add_argument("--node-dir", default="./node_storage", help="Node directory")
 
+    # Command: inspect
+    parser_inspect = subparsers.add_parser("inspect", help="Inspects hidden steganographic data")
+    parser_inspect.add_argument("name", help="Filename to inspect")
+    parser_inspect.add_argument("--node-dir", default="./node_storage", help="Node directory")
+
     # Command: serve
     parser_serve = subparsers.add_parser("serve", help="Starts the P2P server")
     parser_serve.add_argument("--port", type=int, default=5000, help="Server port")
@@ -33,6 +38,15 @@ def main():
     elif args.command == "validate":
         node = Node(node_id="validator", storage_dir=args.node_dir)
         node.validate_local_image(args.name)
+
+    elif args.command == "inspect":
+        from .steganography import Steganography
+        file_path = os.path.join(args.node_dir, args.name)
+        if os.path.exists(file_path):
+            data = Steganography.extract(file_path)
+            print(f"Hidden Data: {data}")
+        else:
+            print("File not found.")
 
     elif args.command == "serve":
         from .server import P2PServer
