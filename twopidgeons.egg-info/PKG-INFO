@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: twopidgeons
+Version: 0.1.0
+Summary: A distributed image management library secured by blockchain
+Author-email: Your Name <your.email@example.com>
+Requires-Python: >=3.8
+Requires-Dist: Pillow

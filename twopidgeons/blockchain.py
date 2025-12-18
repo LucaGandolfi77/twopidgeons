@@ -14,7 +14,13 @@ class Block:
 
     def compute_hash(self) -> str:
         """Calcola l'hash del blocco basato sul suo contenuto."""
-        block_string = json.dumps(self.__dict__, sort_keys=True)
+        # Creiamo una copia del dizionario per non modificare l'originale
+        block_data = self.__dict__.copy()
+        # Rimuoviamo l'hash se presente, per evitare ricorsione/incoerenza
+        if 'hash' in block_data:
+            del block_data['hash']
+            
+        block_string = json.dumps(block_data, sort_keys=True)
         return hashlib.sha256(block_string.encode()).hexdigest()
 
 class Blockchain:

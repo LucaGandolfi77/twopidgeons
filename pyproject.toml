@@ -14,5 +14,8 @@ dependencies = [
 ]
 requires-python = ">=3.8"
 
+[tool.setuptools]
+packages = ["twopidgeons"]
+
 [project.scripts]
 twopidgeons = "twopidgeons.cli:main"
