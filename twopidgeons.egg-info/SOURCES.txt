@@ -13,6 +13,7 @@ twopidgeons/crypto_utils.py
 twopidgeons/extension.c
 twopidgeons/merkle_tree.py
 twopidgeons/node.py
+twopidgeons/pow_module.c
 twopidgeons/server.py
 twopidgeons/steganography.py
 twopidgeons/utils.py

@@ -125,6 +125,45 @@ class Blockchain:
         Proof of Work algorithm.
         Increments the nonce until the hash starts with 'difficulty' zeros.
         """
+        # Try to use C extension for performance
+        try:
+            from . import pow_module
+            
+            # Construct the block header dict with a placeholder nonce
+            block_header = {
+                'index': block.index,
+                'timestamp': block.timestamp,
+                'previous_hash': block.previous_hash,
+                'nonce': 0, 
+                'merkle_root': block.merkle_root
+            }
+            
+            # Serialize to JSON to get the exact format
+            full_str = json.dumps(block_header, sort_keys=True)
+            
+            # We look for the pattern '"nonce": 0'
+            split_pattern = '"nonce": 0'
+            
+            if split_pattern in full_str:
+                parts = full_str.split(split_pattern)
+                if len(parts) == 2:
+                    # Reconstruct parts for C module
+                    # Part 1 ends with '"nonce": '
+                    part1 = parts[0] + '"nonce": '
+                    part2 = parts[1]
+                    
+                    # Call C module
+                    nonce, hash_val = pow_module.find_proof(part1, part2, Blockchain.difficulty)
+                    
+                    if nonce is not None:
+                        block.nonce = nonce
+                        block.hash = hash_val
+                        return hash_val
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"Warning: C extension failed ({e}), falling back to Python.")
+
         block.nonce = 0
         computed_hash = block.compute_hash()
         while not computed_hash.startswith('0' * Blockchain.difficulty):

@@ -1,7 +1,7 @@
 from setuptools import setup, Extension
 
 # Define the C extension with Assembly source (wrapped in C)
-module = Extension(
+module_c = Extension(
     "twopidgeons.twopidgeons_c", 
     sources=[
         "twopidgeons/extension.c",
@@ -9,6 +9,13 @@ module = Extension(
     ]
 )
 
+# Define the PoW optimization module
+module_pow = Extension(
+    "twopidgeons.pow_module",
+    sources=["twopidgeons/pow_module.c"],
+    libraries=["crypto"]
+)
+
 setup(
-    ext_modules=[module]
+    ext_modules=[module_c, module_pow]
 )
