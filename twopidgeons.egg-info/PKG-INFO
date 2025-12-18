@@ -10,3 +10,5 @@ Requires-Dist: requests
 Requires-Dist: fastapi
 Requires-Dist: uvicorn
 Requires-Dist: pydantic
+Requires-Dist: jinja2
+Requires-Dist: python-multipart

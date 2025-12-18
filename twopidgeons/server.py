@@ -1,5 +1,7 @@
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import sys
@@ -12,6 +14,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from twopidgeons.node import Node
 
 app = FastAPI(title="TwoPidgeons Node API")
+
+# Setup Templates
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 import uuid
 
@@ -68,6 +73,18 @@ class RegisterNodesResponse(BaseModel):
 class ResolveResponse(BaseModel):
     message: str
     chain: List[Dict[str, Any]]
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """
+    Dashboard principale del nodo.
+    """
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "node_id": node.node_id,
+        "peers": list(node.nodes),
+        "chain_length": len(node.blockchain.chain)
+    })
 
 @app.get("/mine", response_model=MineResponse)
 async def mine():

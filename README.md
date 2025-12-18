@@ -12,6 +12,7 @@ TwoPidgeons is a Python library for distributed image management secured by a bl
 *   **Proof of Work (PoW)**: Blocks are mined using a computational puzzle to secure the chain.
 *   **Digital Signatures**: Transactions are signed (RSA) to ensure authenticity.
 *   **Steganography**: Metadata is embedded invisibly into image EXIF data.
+*   **Web Dashboard**: A user-friendly web interface to monitor the node, view the blockchain, and mine blocks.
 *   **Docker Support**: Includes Dockerfile and Compose setup for easy deployment.
 
 ## Installation
@@ -23,6 +24,46 @@ git clone https://github.com/LucaGandolfi77/twopidgeons.git
 cd twopidgeons
 pip install -e .
 ```
+
+## Step-by-Step Guide
+
+Follow this guide to set up a node, store an image, and verify it using the new Web Dashboard.
+
+### 1. Start the Node
+Open a terminal and start the server. This will launch the API and the Web Dashboard.
+
+```bash
+# Start the server on port 5000
+python3 twopidgeons/server.py --port 5000
+```
+
+### 2. Access the Dashboard
+Open your web browser and navigate to:
+👉 **[http://localhost:5000](http://localhost:5000)**
+
+You will see the **Node Status** (ID, Peers) and the **Blockchain Explorer** (currently showing just the Genesis Block).
+
+### 3. Store an Image
+Open a second terminal window. Use the CLI to upload an image to your running node.
+
+```bash
+# Create a dummy image for testing if you don't have one
+convert -size 100x100 xc:white test.jpg
+
+# Store the image (must use a 5-letter filename + .2pg)
+twopidgeons store test.jpg hello.2pg --node-dir ./node_storage
+```
+
+*Note: The `store` command automatically encrypts the image, creates a transaction, and mines a new block.*
+
+### 4. Verify on Dashboard
+Go back to your browser and refresh the page (or wait for auto-update if implemented).
+You should see a **new block** in the Blockchain Explorer containing your transaction.
+
+### 5. Mine Manually (Optional)
+You can also mine a new block directly from the Dashboard by clicking the **"⛏️ Mine New Block"** button. This is useful for processing pending transactions or generating new blocks for testing.
+
+---
 
 ## Usage
 
@@ -45,6 +86,8 @@ export NODE_ID="node_A"
 export STORAGE_DIR="./node_A_storage"
 python3 twopidgeons/server.py --port 5000
 ```
+
+Once started, access the **Web Dashboard** at `http://localhost:5000`.
 
 #### 2. Store an Image
 Uploads an image to a node, converts it to `.2pg`, and records it on the blockchain.

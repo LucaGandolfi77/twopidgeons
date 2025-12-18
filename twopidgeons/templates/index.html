@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TwoPidgeons Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
+        h1, h2 { color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; }
+        code { background: #eee; padding: 2px 5px; border-radius: 3px; }
+        .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; }
+        .btn:hover { background: #0056b3; }
+        .status-ok { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐦 TwoPidgeons Node Dashboard</h1>
+        
+        <div class="card">
+            <h2>Node Status</h2>
+            <p><strong>Node ID:</strong> <code>{{ node_id }}</code></p>
+            <p><strong>Peers:</strong> {{ peers|length }} connected</p>
+            <p><strong>Blockchain Length:</strong> {{ chain_length }} blocks</p>
+            <button class="btn" onclick="mineBlock()">⛏️ Mine New Block</button>
+            <button class="btn" onclick="resolveChain()">🔄 Sync Chain</button>
+        </div>
+
+        <div class="card">
+            <h2>Blockchain Explorer</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Index</th>
+                        <th>Timestamp</th>
+                        <th>Transactions</th>
+                        <th>Proof</th>
+                        <th>Hash</th>
+                    </tr>
+                </thead>
+                <tbody id="chain-body">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        async function loadChain() {
+            const response = await fetch('/chain');
+            const data = await response.json();
+            const tbody = document.getElementById('chain-body');
+            tbody.innerHTML = '';
+            
+            data.chain.forEach(block => {
+                const row = `<tr>
+                    <td>${block.index}</td>
+                    <td>${new Date(block.timestamp * 1000).toLocaleString()}</td>
+                    <td>${block.transactions.length}</td>
+                    <td>${block.proof}</td>
+                    <td><code>${block.hash.substring(0, 20)}...</code></td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        async function mineBlock() {
+            try {
+                const response = await fetch('/mine');
+                const data = await response.json();
+                alert(data.message);
+                loadChain();
+            } catch (e) {
+                alert("Error mining block");
+            }
+        }
+
+        async function resolveChain() {
+            const response = await fetch('/nodes/resolve');
+            const data = await response.json();
+            alert(data.message);
+            loadChain();
+        }
+
+        // Load on start
+        loadChain();
+    </script>
+</body>
+</html>
