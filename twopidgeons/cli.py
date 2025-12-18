@@ -30,19 +30,37 @@ def main():
     parser_serve.add_argument("--node-id", default="server_node", help="Node ID")
 
     args = parser.parse_args()
+    
+    from .config import Config
+    
+    # Helper to create config from args
+    def get_config(args):
+        c = Config()
+        if hasattr(args, 'node_dir') and args.node_dir:
+            c.storage_dir = args.node_dir
+        if hasattr(args, 'node_id') and args.node_id:
+            c.node_id = args.node_id
+        if hasattr(args, 'port') and args.port:
+            c.port = args.port
+        return c
 
     if args.command == "store":
-        node = Node(node_id=args.node_id, storage_dir=args.node_dir)
+        node = Node(config=get_config(args))
         node.store_image(args.source, args.name)
     
     elif args.command == "validate":
-        node = Node(node_id="validator", storage_dir=args.node_dir)
+        # Validator needs a temporary ID if not provided, but needs correct storage dir
+        cfg = get_config(args)
+        cfg.node_id = "validator"
+        node = Node(config=cfg)
         node.validate_local_image(args.name)
 
     elif args.command == "inspect":
         # Inspect now needs to decrypt the file first
-        node = Node(node_id="inspector", storage_dir=args.node_dir)
-        file_path = os.path.join(args.node_dir, args.name)
+        cfg = get_config(args)
+        cfg.node_id = "inspector"
+        node = Node(config=cfg)
+        file_path = os.path.join(cfg.storage_dir, args.name)
         
         if os.path.exists(file_path):
             try:
@@ -70,8 +88,9 @@ def main():
 
     elif args.command == "serve":
         from .server import P2PServer
-        node = Node(node_id=args.node_id, storage_dir=args.node_dir)
-        server = P2PServer(node, port=args.port)
+        cfg = get_config(args)
+        node = Node(config=cfg)
+        server = P2PServer(node, port=cfg.port)
         server.run()
     
     else:

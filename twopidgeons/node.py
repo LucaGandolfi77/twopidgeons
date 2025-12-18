@@ -17,27 +17,32 @@ import time
 from collections import defaultdict
 from typing import Callable, List, Any, Optional
 
+from .config import Config, settings
+
 class Node:
-    def __init__(self, node_id: str, storage_dir: str, storage_backend: str = "sqlite"):
-        self.node_id = node_id
+    def __init__(self, config: Config = settings):
+        self.config = config
+        self.node_id = config.node_id
         self._events = defaultdict(list) # Event registry
 
-        self.storage_dir = storage_dir
-        self.nodes = set() # Set of peer nodes (e.g., 'http://192.168.0.5:5000')
+        self.storage_dir = config.storage_dir
+        self.nodes = set(config.peers) 
         
         if not os.path.exists(self.storage_dir):
             os.makedirs(self.storage_dir)
             
         # Initialize Storage Backend
-        if storage_backend == "sqlite":
-            chain_path = os.path.join(self.storage_dir, "blockchain.db")
+        if config.storage_backend == "sqlite":
+            chain_path = os.path.join(self.storage_dir, config.db_filename)
             backend = SQLiteBackend(chain_path)
-        elif storage_backend == "memory":
+        elif config.storage_backend == "memory":
             backend = InMemoryBackend()
         else:
-            raise ValueError(f"Unknown storage backend: {storage_backend}")
+            raise ValueError(f"Unknown storage backend: {config.storage_backend}")
 
         self.blockchain = Blockchain(storage=backend)
+        # Set difficulty from config
+        self.blockchain.difficulty = config.difficulty
 
         # Key management
         self.private_key_path = os.path.join(self.storage_dir, "private_key.pem")

@@ -202,22 +202,28 @@ class P2PServer:
 # --- Main Execution ---
 if __name__ == '__main__':
     import argparse
+    from twopidgeons.config import Config
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--port', default=5000, type=int, help='Porta su cui ascoltare')
+    parser.add_argument('-p', '--port', type=int, help='Porta su cui ascoltare')
+    parser.add_argument('--node-id', type=str, help='ID del nodo')
+    parser.add_argument('--storage-dir', type=str, help='Directory di storage')
     args = parser.parse_args()
     
-    # Configurazione da variabili d'ambiente o default
-    NODE_ID = os.getenv("NODE_ID", str(uuid.uuid4()).replace('-', ''))
-    STORAGE_DIR = os.getenv("STORAGE_DIR", "node_storage")
-    STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "sqlite")
-
-    # Assicuriamoci che la directory esista
-    if not os.path.exists(STORAGE_DIR):
-        os.makedirs(STORAGE_DIR)
-
-    # Inizializzazione del nodo
-    node = Node(node_id=NODE_ID, storage_dir=STORAGE_DIR, storage_backend=STORAGE_BACKEND)
+    # Create config object (loads env vars automatically)
+    config = Config()
     
-    # Inizializzazione e avvio del server
-    server = P2PServer(node, port=args.port)
+    # Override with CLI args if provided
+    if args.port:
+        config.port = args.port
+    if args.node_id:
+        config.node_id = args.node_id
+    if args.storage_dir:
+        config.storage_dir = args.storage_dir
+
+    # Initialize Node with Config
+    node = Node(config=config)
+    
+    # Initialize and run server
+    server = P2PServer(node, host=config.host, port=config.port)
     server.run()
