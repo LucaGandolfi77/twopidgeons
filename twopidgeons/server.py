@@ -209,13 +209,14 @@ if __name__ == '__main__':
     # Configurazione da variabili d'ambiente o default
     NODE_ID = os.getenv("NODE_ID", str(uuid.uuid4()).replace('-', ''))
     STORAGE_DIR = os.getenv("STORAGE_DIR", "node_storage")
+    STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "sqlite")
 
     # Assicuriamoci che la directory esista
     if not os.path.exists(STORAGE_DIR):
         os.makedirs(STORAGE_DIR)
 
     # Inizializzazione del nodo
-    node = Node(node_id=NODE_ID, storage_dir=STORAGE_DIR)
+    node = Node(node_id=NODE_ID, storage_dir=STORAGE_DIR, storage_backend=STORAGE_BACKEND)
     
     # Inizializzazione e avvio del server
     server = P2PServer(node, port=args.port)

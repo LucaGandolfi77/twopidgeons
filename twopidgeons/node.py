@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from PIL import Image
 import json
 from .blockchain import Blockchain, Block
+from .storage import SQLiteBackend, InMemoryBackend, StorageBackend
 from .utils import is_valid_filename, calculate_hash
 from .steganography import Steganography
 from .crypto_utils import (
@@ -14,10 +15,10 @@ from .crypto_utils import (
 )
 import time
 from collections import defaultdict
-from typing import Callable, List, Any
+from typing import Callable, List, Any, Optional
 
 class Node:
-    def __init__(self, node_id: str, storage_dir: str):
+    def __init__(self, node_id: str, storage_dir: str, storage_backend: str = "sqlite"):
         self.node_id = node_id
         self._events = defaultdict(list) # Event registry
 
@@ -27,9 +28,16 @@ class Node:
         if not os.path.exists(self.storage_dir):
             os.makedirs(self.storage_dir)
             
-        # The blockchain is saved in the same directory as the node
-        chain_path = os.path.join(self.storage_dir, "blockchain.db")
-        self.blockchain = Blockchain(db_file=chain_path)
+        # Initialize Storage Backend
+        if storage_backend == "sqlite":
+            chain_path = os.path.join(self.storage_dir, "blockchain.db")
+            backend = SQLiteBackend(chain_path)
+        elif storage_backend == "memory":
+            backend = InMemoryBackend()
+        else:
+            raise ValueError(f"Unknown storage backend: {storage_backend}")
+
+        self.blockchain = Blockchain(storage=backend)
 
         # Key management
         self.private_key_path = os.path.join(self.storage_dir, "private_key.pem")
