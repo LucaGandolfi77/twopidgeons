@@ -64,13 +64,13 @@ class P2PServer:
         
         @self.app.route('/mine', methods=['GET'])
         def mine():
-            # Endpoint per forzare il mining (utile per test)
+            # Endpoint to force mining (useful for testing)
             index = self.node.blockchain.mine()
             if index == -1:
                 return jsonify({'message': 'No transactions to mine'}), 200
             
-            # Dopo il mining, potremmo voler notificare gli altri nodi, 
-            # ma per ora ci affidiamo al meccanismo di consenso (resolve) chiamato dagli altri.
+            # After mining, we might want to notify other nodes,
+            # but for now we rely on the consensus mechanism (resolve) called by others.
             return jsonify({
                 'message': 'New block mined',
                 'index': index,
@@ -78,5 +78,5 @@ class P2PServer:
             }), 200
 
     def run(self):
-        print(f"Avvio server P2P su {self.host}:{self.port}")
+        print(f"Starting P2P server on {self.host}:{self.port}")
         self.app.run(host=self.host, port=self.port)

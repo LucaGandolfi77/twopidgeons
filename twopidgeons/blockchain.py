@@ -13,10 +13,10 @@ class Block:
         self.hash = self.compute_hash()
 
     def compute_hash(self) -> str:
-        """Calcola l'hash del blocco basato sul suo contenuto."""
-        # Creiamo una copia del dizionario per non modificare l'originale
+        """Calculates the block hash based on its content."""
+        # Create a copy of the dictionary to avoid modifying the original
         block_data = self.__dict__.copy()
-        # Rimuoviamo l'hash se presente, per evitare ricorsione/incoerenza
+        # Remove the hash if present, to avoid recursion/inconsistency
         if 'hash' in block_data:
             del block_data['hash']
             
@@ -35,7 +35,7 @@ class Blockchain:
             self.create_genesis_block()
 
     def create_genesis_block(self):
-        """Crea il blocco genesi (il primo blocco della catena)."""
+        """Creates the genesis block (the first block in the chain)."""
         genesis_block = Block(0, [], 0.0, "0")
         self.chain.append(genesis_block)
         self.save_chain()
@@ -45,13 +45,13 @@ class Blockchain:
         return self.chain[-1]
 
     def add_new_transaction(self, transaction: Dict):
-        """Aggiunge una transazione alla lista delle non confermate."""
+        """Adds a transaction to the list of unconfirmed transactions."""
         self.unconfirmed_transactions.append(transaction)
 
     def mine(self) -> int:
         """
-        Impacchetta le transazioni pendenti in un nuovo blocco e lo aggiunge alla catena.
-        Ritorna l'indice del nuovo blocco.
+        Packages pending transactions into a new block and adds it to the chain.
+        Returns the index of the new block.
         """
         if not self.unconfirmed_transactions:
             return -1
@@ -68,7 +68,7 @@ class Blockchain:
         return new_block.index
 
     def save_chain(self):
-        """Salva la catena su file JSON."""
+        """Saves the chain to a JSON file."""
         if not self.chain_file:
             return
             
@@ -77,7 +77,7 @@ class Blockchain:
             json.dump(chain_data, f, indent=4)
 
     def load_chain(self):
-        """Carica la catena da file JSON."""
+        """Loads the chain from a JSON file."""
         if not self.chain_file or not os.path.exists(self.chain_file):
             return
 
@@ -87,33 +87,31 @@ class Blockchain:
                 
             self.chain = []
             for block_data in chain_data:
-                # Ricostruiamo l'oggetto Block
+                # Reconstruct the Block object
                 block = Block(
                     index=block_data['index'],
                     transactions=block_data['transactions'],
                     timestamp=block_data['timestamp'],
                     previous_hash=block_data['previous_hash']
                 )
-                # L'hash viene ricalcolato nel costruttore, ma possiamo verificare se corrisponde
-                # Nota: se ricalcoliamo l'hash qui, deve matchare quello salvato.
-                # Se il json è stato modificato a mano, questo check fallirà se controlliamo block.hash vs block_data['hash']
-                # Ma Block.__init__ chiama compute_hash().
+                # The hash is recalculated in the constructor, but we can verify if it matches
+                # Note: if we recalculate the hash here, it must match the saved one.
                 
                 self.chain.append(block)
         except Exception as e:
-            print(f"Errore nel caricamento della blockchain: {e}")
+            print(f"Error loading blockchain: {e}")
             self.chain = []
             self.create_genesis_block()
 
     @staticmethod
     def is_valid_chain(chain: List[Block]) -> bool:
         """
-        Verifica se una data catena è valida.
+        Verifies if a given chain is valid.
         """
         if not chain:
             return False
             
-        # Verifica il blocco genesi (semplificato, controlliamo solo indice e prev_hash)
+        # Verify genesis block (simplified, checking only index and prev_hash)
         first_block = chain[0]
         if first_block.index != 0 or first_block.previous_hash != "0":
             return False
@@ -129,7 +127,7 @@ class Blockchain:
 
     @staticmethod
     def is_valid_block(block: Block, previous_block: Block) -> bool:
-        """Verifica la validità di un singolo blocco rispetto al precedente."""
+        """Verifies the validity of a single block against the previous one."""
         if block.previous_hash != previous_block.hash:
             return False
         if block.index != previous_block.index + 1:
@@ -140,7 +138,7 @@ class Blockchain:
 
     def replace_chain(self, new_chain: List[Block]) -> bool:
         """
-        Sostituisce la catena corrente con una nuova se è valida e più lunga.
+        Replaces the current chain with a new one if it is valid and longer.
         """
         if len(new_chain) > len(self.chain) and self.is_valid_chain(new_chain):
             self.chain = new_chain
@@ -149,7 +147,7 @@ class Blockchain:
         return False
 
     def is_chain_valid(self) -> bool:
-        """Verifica l'integrità della blockchain."""
+        """Verifies the integrity of the blockchain."""
         for i in range(1, len(self.chain)):
             current = self.chain[i]
             previous = self.chain[i - 1]
@@ -161,7 +159,7 @@ class Blockchain:
         return True
 
     def find_transaction(self, image_hash: str) -> Dict:
-        """Cerca una transazione basata sull'hash dell'immagine."""
+        """Searches for a transaction based on the image hash."""
         for block in self.chain:
             for tx in block.transactions:
                 if tx.get('image_hash') == image_hash:
