@@ -3,6 +3,7 @@ import json
 import hashlib
 import os
 from typing import List, Dict, Any
+from .crypto_utils import verify_signature, deserialize_public_key
 
 class Block:
     def __init__(self, index: int, transactions: List[Dict], timestamp: float, previous_hash: str, nonce: int = 0):
@@ -50,9 +51,30 @@ class Blockchain:
     def last_block(self) -> Block:
         return self.chain[-1]
 
-    def add_new_transaction(self, transaction: Dict):
+    def add_new_transaction(self, transaction: Dict) -> bool:
         """Adds a transaction to the list of unconfirmed transactions."""
+        # Verify signature if present
+        if 'signature' in transaction and 'public_key' in transaction:
+            signature = transaction['signature']
+            public_key_pem = transaction['public_key']
+            
+            # Reconstruct signed data
+            tx_copy = transaction.copy()
+            del tx_copy['signature']
+            
+            tx_bytes = json.dumps(tx_copy, sort_keys=True).encode()
+            
+            try:
+                public_key = deserialize_public_key(public_key_pem)
+                if not verify_signature(public_key, tx_bytes, signature):
+                    print("Invalid transaction signature!")
+                    return False
+            except Exception as e:
+                print(f"Error verifying signature: {e}")
+                return False
+
         self.unconfirmed_transactions.append(transaction)
+        return True
 
     def proof_of_work(self, block: Block) -> str:
         """

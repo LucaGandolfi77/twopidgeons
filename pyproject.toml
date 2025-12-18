@@ -11,6 +11,8 @@ authors = [
 ]
 dependencies = [
     "Pillow",
+    "cryptography",
+    "requests",
 ]
 requires-python = ">=3.8"
 

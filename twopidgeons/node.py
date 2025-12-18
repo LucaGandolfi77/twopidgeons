@@ -3,9 +3,14 @@ import shutil
 import requests
 from urllib.parse import urlparse
 from PIL import Image
+import json
 from .blockchain import Blockchain, Block
 from .utils import is_valid_filename, calculate_hash
 from .steganography import Steganography
+from .crypto_utils import (
+    generate_keys, save_key_to_file, load_private_key_from_file, 
+    load_public_key_from_file, serialize_public_key, sign_data
+)
 
 class Node:
     def __init__(self, node_id: str, storage_dir: str):
@@ -20,6 +25,21 @@ class Node:
         # The blockchain is saved in the same directory as the node
         chain_path = os.path.join(self.storage_dir, "blockchain.json")
         self.blockchain = Blockchain(chain_file=chain_path)
+
+        # Key management
+        self.private_key_path = os.path.join(self.storage_dir, "private_key.pem")
+        self.public_key_path = os.path.join(self.storage_dir, "public_key.pem")
+        
+        if os.path.exists(self.private_key_path) and os.path.exists(self.public_key_path):
+            self.private_key = load_private_key_from_file(self.private_key_path)
+            self.public_key = load_public_key_from_file(self.public_key_path)
+        else:
+            print("Generating new key pair...")
+            self.private_key, self.public_key = generate_keys()
+            save_key_to_file(self.private_key, self.private_key_path, is_private=True)
+            save_key_to_file(self.public_key, self.public_key_path, is_private=False)
+            
+        self.public_key_pem = serialize_public_key(self.public_key)
 
     def register_node(self, address: str):
         """Adds a new node to the list of peers."""
@@ -160,16 +180,23 @@ class Node:
         final_hash = calculate_hash(final_data)
 
         # 8. Blockchain Transaction Creation
-        transaction = {
+        transaction_data = {
             'node_id': self.node_id,
             'filename': target_filename,
             'image_hash': final_hash,
             'source_hash': img_hash,
             'timestamp': time.time(),
-            'hidden_data': hidden_data # Optional: store what we hid
+            'hidden_data': hidden_data, # Optional: store what we hid
+            'public_key': self.public_key_pem
         }
         
-        self.blockchain.add_new_transaction(transaction)
+        # Sign the transaction
+        tx_bytes = json.dumps(transaction_data, sort_keys=True).encode()
+        signature = sign_data(self.private_key, tx_bytes)
+        
+        transaction_data['signature'] = signature
+        
+        self.blockchain.add_new_transaction(transaction_data)
         self.blockchain.mine()
         
         # After mining, broadcast the new block to the network
