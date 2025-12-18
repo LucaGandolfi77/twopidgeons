@@ -402,6 +402,22 @@ class Node:
         print(f"Transfer of {filename} to {recipient_id} completed in block #{self.blockchain.last_block.index}")
         return True
 
+    def get_owner_public_key(self, filename: str) -> Optional[bytes]:
+        """Retrieves the Public Key of the current owner of the file."""
+        # In our simplified model, the owner is the one who created the last transaction for this file.
+        # (Ideally we should track transfers, but for now let's assume the creator or last transferrer)
+        
+        # We scan backwards to find the latest transaction involving this filename
+        for block in reversed(self.blockchain.chain):
+            for tx in block.transactions:
+                if tx.get('filename') == filename:
+                    # Found the latest transaction (creation or transfer)
+                    pk_pem = tx.get('public_key')
+                    if pk_pem:
+                        return pk_pem.encode('utf-8') if isinstance(pk_pem, str) else pk_pem
+        return None
+
+
 
 
 import time

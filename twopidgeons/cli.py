@@ -27,6 +27,17 @@ def main():
     parser_validate.add_argument("name", help="Filename to validate (e.g. abcde.2pg)")
     parser_validate.add_argument("--node-dir", default="./node_storage", help="Node directory")
 
+    # Command: zk-challenge (Verifier)
+    parser_zk_challenge = subparsers.add_parser("zk-challenge", help="Generates a ZK challenge for an image owner")
+    parser_zk_challenge.add_argument("filename", help="Filename to challenge ownership of")
+    parser_zk_challenge.add_argument("--node-dir", default="./node_storage", help="Node directory")
+
+    # Command: zk-prove (Prover)
+    parser_zk_prove = subparsers.add_parser("zk-prove", help="Solves a ZK challenge")
+    parser_zk_prove.add_argument("challenge", help="Encrypted challenge string")
+    parser_zk_prove.add_argument("--node-dir", default="./node_storage", help="Node directory")
+    parser_zk_prove.add_argument("--node-id", default="prover", help="Node ID")
+
     # Command: inspect
     parser_inspect = subparsers.add_parser("inspect", help="Inspects hidden steganographic data")
     parser_inspect.add_argument("name", help="Filename to inspect")
@@ -60,6 +71,39 @@ def main():
     elif args.command == "transfer":
         node = Node(config=get_config(args))
         node.transfer_image(args.name, args.recipient, args.amount)
+
+    elif args.command == "zk-challenge":
+        from .zkp import ZKProof
+        node = Node(config=get_config(args))
+        
+        # 1. Get Owner's Public Key
+        pk_pem = node.get_owner_public_key(args.filename)
+        if not pk_pem:
+            print(f"Error: Could not find owner for '{args.filename}'")
+            return
+
+        # 2. Generate Challenge
+        challenge, expected = ZKProof.create_challenge(pk_pem)
+        
+        print("\n--- Zero-Knowledge Challenge Generated ---")
+        print(f"Target File: {args.filename}")
+        print(f"Challenge (Send this to Prover): {challenge}")
+        print(f"Expected Response (Keep secret until verification): {expected}")
+        print("------------------------------------------\n")
+
+    elif args.command == "zk-prove":
+        from .zkp import ZKProof
+        node = Node(config=get_config(args))
+        
+        # 1. Solve Challenge
+        response = ZKProof.solve_challenge(node.private_key, args.challenge)
+        
+        if response:
+            print("\n--- Zero-Knowledge Proof Generated ---")
+            print(f"Proof (Send this to Verifier): {response}")
+            print("--------------------------------------\n")
+        else:
+            print("Error: Could not solve challenge (Wrong Private Key?)")
 
     elif args.command == "validate":
         # Validator needs a temporary ID if not provided, but needs correct storage dir
