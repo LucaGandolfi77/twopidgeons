@@ -2,6 +2,7 @@ import time
 import json
 import hashlib
 import os
+import sqlite3
 from typing import List, Dict, Any
 from .crypto_utils import verify_signature, deserialize_public_key
 
@@ -28,15 +29,41 @@ class Block:
 class Blockchain:
     difficulty = 4
 
-    def __init__(self, chain_file: str = None):
+    def __init__(self, db_file: str = "blockchain.db"):
         self.unconfirmed_transactions: List[Dict] = []
         self.chain: List[Block] = []
-        self.chain_file = chain_file
+        self.db_file = db_file
         
-        if self.chain_file and os.path.exists(self.chain_file):
-            self.load_chain()
-        else:
+        self.conn = sqlite3.connect(self.db_file, check_same_thread=False)
+        self.create_tables()
+        
+        self.load_chain()
+        
+        if not self.chain:
             self.create_genesis_block()
+
+    def create_tables(self):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS blocks (
+                idx INTEGER PRIMARY KEY,
+                timestamp REAL,
+                previous_hash TEXT,
+                hash TEXT,
+                nonce INTEGER
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                block_idx INTEGER,
+                image_hash TEXT,
+                source_hash TEXT,
+                data TEXT,
+                FOREIGN KEY(block_idx) REFERENCES blocks(idx)
+            )
+        """)
+        self.conn.commit()
 
     def create_genesis_block(self):
         """Creates the genesis block (the first block in the chain)."""
@@ -45,7 +72,7 @@ class Blockchain:
         # Usually genesis is hardcoded, but here we can just mine it to be consistent.
         self.proof_of_work(genesis_block)
         self.chain.append(genesis_block)
-        self.save_chain()
+        self.save_block(genesis_block)
 
     @property
     def last_block(self) -> Block:
@@ -107,45 +134,46 @@ class Blockchain:
         
         self.chain.append(new_block)
         self.unconfirmed_transactions = []
-        self.save_chain()
+        self.save_block(new_block)
         return new_block.index
 
-    def save_chain(self):
-        """Saves the chain to a JSON file."""
-        if not self.chain_file:
-            return
-            
-        chain_data = [block.__dict__ for block in self.chain]
-        with open(self.chain_file, 'w') as f:
-            json.dump(chain_data, f, indent=4)
+    def save_block(self, block: Block):
+        """Saves a single block to the database."""
+        cursor = self.conn.cursor()
+        cursor.execute("INSERT INTO blocks (idx, timestamp, previous_hash, hash, nonce) VALUES (?, ?, ?, ?, ?)",
+                       (block.index, block.timestamp, block.previous_hash, block.hash, block.nonce))
+        
+        for tx in block.transactions:
+            # We store the full JSON for reconstruction, and hashes for indexing
+            tx_json = json.dumps(tx)
+            img_hash = tx.get('image_hash')
+            src_hash = tx.get('source_hash')
+            cursor.execute("INSERT INTO transactions (block_idx, image_hash, source_hash, data) VALUES (?, ?, ?, ?)",
+                           (block.index, img_hash, src_hash, tx_json))
+        self.conn.commit()
 
     def load_chain(self):
-        """Loads the chain from a JSON file."""
-        if not self.chain_file or not os.path.exists(self.chain_file):
-            return
-
+        """Loads the chain from the database."""
         try:
-            with open(self.chain_file, 'r') as f:
-                chain_data = json.load(f)
-                
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT idx, timestamp, previous_hash, hash, nonce FROM blocks ORDER BY idx ASC")
+            rows = cursor.fetchall()
             self.chain = []
-            for block_data in chain_data:
-                # Reconstruct the Block object
-                block = Block(
-                    index=block_data['index'],
-                    transactions=block_data['transactions'],
-                    timestamp=block_data['timestamp'],
-                    previous_hash=block_data['previous_hash'],
-                    nonce=block_data.get('nonce', 0)
-                )
-                # The hash is recalculated in the constructor, but we can verify if it matches
-                # Note: if we recalculate the hash here, it must match the saved one.
+            for row in rows:
+                idx, timestamp, previous_hash, block_hash, nonce = row
+                # Load transactions
+                cursor.execute("SELECT data FROM transactions WHERE block_idx = ?", (idx,))
+                tx_rows = cursor.fetchall()
+                transactions = [json.loads(r[0]) for r in tx_rows]
                 
+                block = Block(idx, transactions, timestamp, previous_hash, nonce)
+                # Verify hash consistency? Maybe skip for speed or check.
+                # block.hash should match block_hash
                 self.chain.append(block)
         except Exception as e:
             print(f"Error loading blockchain: {e}")
             self.chain = []
-            self.create_genesis_block()
+            # Genesis block will be created in __init__ if chain is empty
 
     @staticmethod
     def is_valid_chain(chain: List[Block]) -> bool:
@@ -189,7 +217,15 @@ class Blockchain:
         """
         if len(new_chain) > len(self.chain) and self.is_valid_chain(new_chain):
             self.chain = new_chain
-            self.save_chain()
+            
+            # Wipe DB and save new chain
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM transactions")
+            cursor.execute("DELETE FROM blocks")
+            self.conn.commit()
+            
+            for block in new_chain:
+                self.save_block(block)
             return True
         return False
 
@@ -207,10 +243,9 @@ class Blockchain:
 
     def find_transaction(self, image_hash: str) -> Dict:
         """Searches for a transaction based on the image hash or source hash."""
-        for block in self.chain:
-            for tx in block.transactions:
-                if tx.get('image_hash') == image_hash:
-                    return tx
-                if tx.get('source_hash') == image_hash:
-                    return tx
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT data FROM transactions WHERE image_hash = ? OR source_hash = ?", (image_hash, image_hash))
+        row = cursor.fetchone()
+        if row:
+            return json.loads(row[0])
         return None

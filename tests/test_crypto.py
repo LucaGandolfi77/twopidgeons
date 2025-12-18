@@ -5,11 +5,11 @@ from twopidgeons.blockchain import Blockchain
 
 @pytest.fixture
 def blockchain(tmp_path):
-    chain_file = tmp_path / "test_chain_crypto.json"
+    chain_file = tmp_path / "test_chain_crypto.db"
     # Lower difficulty
     original_difficulty = Blockchain.difficulty
     Blockchain.difficulty = 1
-    bc = Blockchain(chain_file=str(chain_file))
+    bc = Blockchain(db_file=str(chain_file))
     yield bc
     Blockchain.difficulty = original_difficulty
 

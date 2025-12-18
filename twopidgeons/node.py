@@ -23,8 +23,8 @@ class Node:
             os.makedirs(self.storage_dir)
             
         # The blockchain is saved in the same directory as the node
-        chain_path = os.path.join(self.storage_dir, "blockchain.json")
-        self.blockchain = Blockchain(chain_file=chain_path)
+        chain_path = os.path.join(self.storage_dir, "blockchain.db")
+        self.blockchain = Blockchain(db_file=chain_path)
 
         # Key management
         self.private_key_path = os.path.join(self.storage_dir, "private_key.pem")

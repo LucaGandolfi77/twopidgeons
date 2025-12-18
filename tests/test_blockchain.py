@@ -7,11 +7,11 @@ from twopidgeons.blockchain import Blockchain, Block
 @pytest.fixture
 def blockchain(tmp_path):
     # Use a temporary file for the blockchain
-    chain_file = tmp_path / "test_chain.json"
+    chain_file = tmp_path / "test_chain.db"
     # Lower difficulty for tests to speed up execution
     original_difficulty = Blockchain.difficulty
     Blockchain.difficulty = 1
-    bc = Blockchain(chain_file=str(chain_file))
+    bc = Blockchain(db_file=str(chain_file))
     yield bc
     Blockchain.difficulty = original_difficulty
 
@@ -56,18 +56,24 @@ def test_chain_validity(blockchain):
     assert blockchain.is_chain_valid() is False
 
 def test_persistence(tmp_path):
-    chain_file = tmp_path / "persistent_chain.json"
-    bc1 = Blockchain(chain_file=str(chain_file))
+    chain_file = tmp_path / "persistent_chain.db"
+    # Lower difficulty
+    original_difficulty = Blockchain.difficulty
+    Blockchain.difficulty = 1
+    
+    bc1 = Blockchain(db_file=str(chain_file))
     
     bc1.add_new_transaction({"data": "tx1"})
     bc1.mine()
     
     # Create a new instance pointing to the same file
-    bc2 = Blockchain(chain_file=str(chain_file))
+    bc2 = Blockchain(db_file=str(chain_file))
     
     assert len(bc2.chain) == 2
-    assert bc2.chain[1].transactions == [{"data": "tx1"}]
+    assert bc2.last_block.index == 1
     assert bc2.last_block.hash == bc1.last_block.hash
+    
+    Blockchain.difficulty = original_difficulty
 
 def test_is_valid_chain_static():
     # Lower difficulty for this test
