@@ -5,25 +5,33 @@ import os
 import sqlite3
 from typing import List, Dict, Any
 from .crypto_utils import verify_signature, deserialize_public_key
+from .merkle_tree import MerkleTree
 
 class Block:
-    def __init__(self, index: int, transactions: List[Dict], timestamp: float, previous_hash: str, nonce: int = 0):
+    def __init__(self, index: int, transactions: List[Dict], timestamp: float, previous_hash: str, nonce: int = 0, merkle_root: str = None):
         self.index = index
         self.transactions = transactions
         self.timestamp = timestamp
         self.previous_hash = previous_hash
         self.nonce = nonce
+        
+        if merkle_root:
+            self.merkle_root = merkle_root
+        else:
+            self.merkle_root = MerkleTree.compute_root(self.transactions)
+            
         self.hash = self.compute_hash()
 
     def compute_hash(self) -> str:
-        """Calculates the block hash based on its content."""
-        # Create a copy of the dictionary to avoid modifying the original
-        block_data = self.__dict__.copy()
-        # Remove the hash if present, to avoid recursion/inconsistency
-        if 'hash' in block_data:
-            del block_data['hash']
-            
-        block_string = json.dumps(block_data, sort_keys=True)
+        """Calculates the block hash based on header (including Merkle Root)."""
+        block_header = {
+            'index': self.index,
+            'timestamp': self.timestamp,
+            'previous_hash': self.previous_hash,
+            'nonce': self.nonce,
+            'merkle_root': self.merkle_root
+        }
+        block_string = json.dumps(block_header, sort_keys=True)
         return hashlib.sha256(block_string.encode()).hexdigest()
 
 class Blockchain:
@@ -50,9 +58,18 @@ class Blockchain:
                 timestamp REAL,
                 previous_hash TEXT,
                 hash TEXT,
-                nonce INTEGER
+                nonce INTEGER,
+                merkle_root TEXT
             )
         """)
+        
+        # Check if merkle_root column exists (migration for existing DBs)
+        cursor.execute("PRAGMA table_info(blocks)")
+        columns = [info[1] for info in cursor.fetchall()]
+        if 'merkle_root' not in columns:
+            print("Migrating database: adding merkle_root column...")
+            cursor.execute("ALTER TABLE blocks ADD COLUMN merkle_root TEXT")
+            
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,8 +157,8 @@ class Blockchain:
     def save_block(self, block: Block):
         """Saves a single block to the database."""
         cursor = self.conn.cursor()
-        cursor.execute("INSERT INTO blocks (idx, timestamp, previous_hash, hash, nonce) VALUES (?, ?, ?, ?, ?)",
-                       (block.index, block.timestamp, block.previous_hash, block.hash, block.nonce))
+        cursor.execute("INSERT INTO blocks (idx, timestamp, previous_hash, hash, nonce, merkle_root) VALUES (?, ?, ?, ?, ?, ?)",
+                       (block.index, block.timestamp, block.previous_hash, block.hash, block.nonce, block.merkle_root))
         
         for tx in block.transactions:
             # We store the full JSON for reconstruction, and hashes for indexing
@@ -156,17 +173,17 @@ class Blockchain:
         """Loads the chain from the database."""
         try:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT idx, timestamp, previous_hash, hash, nonce FROM blocks ORDER BY idx ASC")
+            cursor.execute("SELECT idx, timestamp, previous_hash, hash, nonce, merkle_root FROM blocks ORDER BY idx ASC")
             rows = cursor.fetchall()
             self.chain = []
             for row in rows:
-                idx, timestamp, previous_hash, block_hash, nonce = row
+                idx, timestamp, previous_hash, block_hash, nonce, merkle_root = row
                 # Load transactions
                 cursor.execute("SELECT data FROM transactions WHERE block_idx = ?", (idx,))
                 tx_rows = cursor.fetchall()
                 transactions = [json.loads(r[0]) for r in tx_rows]
                 
-                block = Block(idx, transactions, timestamp, previous_hash, nonce)
+                block = Block(idx, transactions, timestamp, previous_hash, nonce, merkle_root)
                 # Verify hash consistency? Maybe skip for speed or check.
                 # block.hash should match block_hash
                 self.chain.append(block)
