@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  bootstrap:
+    build: .
+    image: twopidgeons:latest
+    container_name: bootstrap_node
+    command: twopidgeons serve --port 5000 --node-dir /data --node-id bootstrap
+    volumes:
+      - ./node_storage_bootstrap:/data
+    ports:
+      - "5000:5000"
+    networks:
+      - p2p_network
+
+  node:
+    build: .
+    image: twopidgeons:latest
+    depends_on:
+      - bootstrap
+    # Use a shell script to register with bootstrap after starting
+    # We register the bootstrap node in our local list, AND register ourselves in the bootstrap's list.
+    command: >
+      sh -c "twopidgeons serve --port 5000 --node-dir /data --node-id $$(hostname) &
+             sleep 5;
+             curl -X POST -H 'Content-Type: application/json' -d '{\"nodes\": [\"http://bootstrap:5000\"]}' http://localhost:5000/nodes/register;
+             curl -X POST -H 'Content-Type: application/json' -d '{\"nodes\": [\"http://'$$(hostname)':5000\"]}' http://bootstrap:5000/nodes/register;
+             wait"
+    volumes:
+      - ./node_storage_workers:/data
+    deploy:
+      replicas: 2
+    networks:
+      - p2p_network
+
+networks:
+  p2p_network:
+    driver: bridge
