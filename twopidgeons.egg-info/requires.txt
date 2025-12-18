@@ -1,3 +1,6 @@
 Pillow
 cryptography
 requests
+fastapi
+uvicorn
+pydantic

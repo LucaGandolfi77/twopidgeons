@@ -4,16 +4,15 @@ TwoPidgeons is a Python library for distributed image management secured by a bl
 
 ## Features
 
-*   **Blockchain-based Validation**: Every image stored is hashed and recorded on a local blockchain. Any modification to the file is detected immediately.
-*   **Proof of Work (PoW)**: Blocks are mined using a computational puzzle (finding a hash with leading zeros) to secure the chain against tampering.
-*   **Digital Signatures**: Every transaction is cryptographically signed (RSA) by the node's private key, ensuring authenticity and non-repudiation.
-*   **Steganography**: Origin metadata (Node ID and Timestamp) is embedded invisibly into the image EXIF data.
-*   **Strict Filename Policy**: Images must follow the format `[a-z]{5}.2pg` (e.g., `abcde.2pg`).
-*   **JPEG Compatibility**: The `.2pg` format is fully compatible with JPEG.
-*   **P2P Networking**: Nodes can communicate, broadcast new blocks, and synchronize their blockchains using a consensus algorithm (Longest Chain Rule).
-*   **Docker Support**: Easily deploy a simulated P2P network using Docker Compose.
-*   **Persistence**: The blockchain is saved to disk (`blockchain.json`) and reloaded upon restart.
-*   **CLI Interface**: Easy-to-use command line interface for managing nodes and images.
+*   **High Performance API**: Built with **FastAPI** and **Uvicorn** for asynchronous, high-throughput request handling.
+*   **Blockchain-based Validation**: Every image stored is hashed and recorded on a local blockchain.
+*   **SQLite Storage**: Blockchain data is persistently stored in a SQLite database (`blockchain.db`) for reliability and scalability.
+*   **Merkle Trees**: Blocks utilize Merkle Trees to ensure efficient and secure verification of transaction integrity.
+*   **Hybrid Encryption**: Images are secured using a hybrid approach (RSA for key exchange, AES for data encryption).
+*   **Proof of Work (PoW)**: Blocks are mined using a computational puzzle to secure the chain.
+*   **Digital Signatures**: Transactions are signed (RSA) to ensure authenticity.
+*   **Steganography**: Metadata is embedded invisibly into image EXIF data.
+*   **Docker Support**: Includes Dockerfile and Compose setup for easy deployment.
 
 ## Installation
 
@@ -35,7 +34,16 @@ The library provides a `twopidgeons` command with three main subcommands:
 Starts a server node that listens for connections and syncs with peers.
 
 ```bash
-twopidgeons serve --port 5000 --node-dir ./node_A
+# Run the FastAPI server
+python3 twopidgeons/server.py --port 5000
+```
+
+You can configure the node ID and storage directory using environment variables:
+
+```bash
+export NODE_ID="node_A"
+export STORAGE_DIR="./node_A_storage"
+python3 twopidgeons/server.py --port 5000
 ```
 
 #### 2. Store an Image

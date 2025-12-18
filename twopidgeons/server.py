@@ -1,82 +1,196 @@
-import requests
-from flask import Flask, jsonify, request
-from .node import Node
-from .blockchain import Block
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+import sys
+import os
+import time
 
-class P2PServer:
-    def __init__(self, node: Node, host: str = '0.0.0.0', port: int = 5000):
-        self.node = node
-        self.host = host
-        self.port = port
-        self.app = Flask(__name__)
-        self.setup_routes()
+# Aggiungi la directory parent al path per importare i moduli locali
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-    def setup_routes(self):
-        @self.app.route('/chain', methods=['GET'])
-        def full_chain():
-            chain_data = [block.__dict__ for block in self.node.blockchain.chain]
-            return jsonify({
-                'chain': chain_data,
-                'length': len(chain_data)
-            }), 200
+from twopidgeons.node import Node
 
-        @self.app.route('/nodes/register', methods=['POST'])
-        def register_nodes():
-            values = request.get_json()
-            nodes = values.get('nodes')
-            if nodes is None:
-                return "Error: Please supply a valid list of nodes", 400
+app = FastAPI(title="TwoPidgeons Node API")
 
-            for node_url in nodes:
-                self.node.register_node(node_url)
+import uuid
 
-            return jsonify({
-                'message': 'New nodes have been added',
-                'total_nodes': list(self.node.nodes)
-            }), 201
+# Inizializzazione del nodo
+# Usiamo variabili d'ambiente o valori di default
+NODE_ID = os.getenv("NODE_ID", str(uuid.uuid4()).replace('-', ''))
+STORAGE_DIR = os.getenv("STORAGE_DIR", "node_storage")
 
-        @self.app.route('/nodes/resolve', methods=['GET'])
-        def consensus():
-            replaced = self.node.resolve_conflicts()
-            if replaced:
-                response = {
-                    'message': 'Our chain was replaced',
-                    'new_chain': [b.__dict__ for b in self.node.blockchain.chain]
-                }
-            else:
-                response = {
-                    'message': 'Our chain is authoritative',
-                    'chain': [b.__dict__ for b in self.node.blockchain.chain]
-                }
-            return jsonify(response), 200
-            
-        @self.app.route('/block/receive', methods=['POST'])
-        def receive_block():
-            block_data = request.get_json()
-            if not block_data:
-                return "Invalid data", 400
-                
-            accepted = self.node.receive_block(block_data)
-            if accepted:
-                return jsonify({'message': 'Block accepted'}), 201
-            else:
-                return jsonify({'message': 'Block rejected or triggered sync'}), 200
-        
-        @self.app.route('/mine', methods=['GET'])
-        def mine():
-            # Endpoint to force mining (useful for testing)
-            index = self.node.blockchain.mine()
-            if index == -1:
-                return jsonify({'message': 'No transactions to mine'}), 200
-            
-            # After mining, we might want to notify other nodes,
-            # but for now we rely on the consensus mechanism (resolve) called by others.
-            return jsonify({
-                'message': 'New block mined',
-                'index': index,
-                'block': self.node.blockchain.last_block.__dict__
-            }), 200
+# Assicuriamoci che la directory esista
+if not os.path.exists(STORAGE_DIR):
+    os.makedirs(STORAGE_DIR)
 
-    def run(self):
-        print(f"Starting P2P server on {self.host}:{self.port}")
-        self.app.run(host=self.host, port=self.port)
+node = Node(node_id=NODE_ID, storage_dir=STORAGE_DIR)
+
+class TransactionModel(BaseModel):
+    sender: str
+    recipient: str
+    amount: float
+    signature: str
+    image_data: Optional[str] = None
+    encrypted_aes_key: Optional[str] = None
+    iv: Optional[str] = None
+
+class BlockModel(BaseModel):
+    index: int
+    timestamp: float
+    transactions: List[TransactionModel]
+    proof: int
+    previous_hash: str
+    merkle_root: str
+
+class ChainResponse(BaseModel):
+    chain: List[Dict[str, Any]]
+    length: int
+
+class MineResponse(BaseModel):
+    message: str
+    index: int
+    transactions: List[TransactionModel]
+    proof: int
+    previous_hash: str
+    merkle_root: str
+
+class TransactionResponse(BaseModel):
+    message: str
+
+class RegisterNodesRequest(BaseModel):
+    nodes: List[str]
+
+class RegisterNodesResponse(BaseModel):
+    message: str
+    total_nodes: List[str]
+
+class ResolveResponse(BaseModel):
+    message: str
+    chain: List[Dict[str, Any]]
+
+@app.get("/mine", response_model=MineResponse)
+async def mine():
+    """
+    Endpoint per minare un nuovo blocco.
+    """
+    # Ricompensa per il miner
+    # Il mittente è "0" per indicare che è una nuova moneta minata
+    reward_transaction = {
+        "sender": "0",
+        "recipient": node.node_identifier,
+        "amount": 1,
+        "signature": "", # Nessuna firma necessaria per il mining reward
+        "timestamp": time.time()
+    }
+    node.blockchain.add_new_transaction(reward_transaction)
+
+    # Il metodo mine() si occupa di creare il blocco, calcolare la PoW e salvarlo
+    block_index = node.blockchain.mine()
+    
+    if block_index == -1:
+        raise HTTPException(status_code=400, detail="Nessuna transazione da minare (eccetto reward)")
+
+    block = node.blockchain.last_block
+
+    response = {
+        'message': "Nuovo blocco forgiato",
+        'index': block.index,
+        'transactions': [tx for tx in block.transactions], # Assumiamo che siano già dict
+        'proof': block.nonce,
+        'previous_hash': block.previous_hash,
+        'merkle_root': block.merkle_root
+    }
+    return response
+
+@app.post("/transactions/new", response_model=TransactionResponse, status_code=201)
+async def new_transaction(transaction: TransactionModel):
+    """
+    Endpoint per creare una nuova transazione.
+    """
+    tx_data = transaction.dict(exclude_none=True)
+    tx_data['timestamp'] = time.time()
+    
+    # Se c'è una chiave pubblica nel nodo (per verificare la firma), dovremmo passarla?
+    # Per ora assumiamo che la firma sia verificata dentro add_new_transaction se i campi sono presenti
+    # Ma TransactionModel non ha public_key. 
+    # Se la logica richiede public_key per la verifica, il client deve inviarla.
+    # Aggiungiamo public_key al modello se necessario, o assumiamo che sia gestita altrove.
+    # Per ora passiamo i dati così come sono.
+    
+    success = node.blockchain.add_new_transaction(tx_data)
+    
+    if not success:
+         raise HTTPException(status_code=400, detail="Transazione non valida")
+
+    response = {'message': f'La transazione sarà aggiunta al prossimo blocco'}
+    return response
+
+@app.get("/chain", response_model=ChainResponse)
+async def full_chain():
+    """
+    Restituisce l'intera blockchain.
+    """
+    chain_data = []
+    for block in node.blockchain.chain:
+        block_dict = {
+            'index': block.index,
+            'timestamp': block.timestamp,
+            'transactions': block.transactions,
+            'proof': block.nonce,
+            'previous_hash': block.previous_hash,
+            'merkle_root': block.merkle_root,
+            'hash': block.hash
+        }
+        chain_data.append(block_dict)
+
+    response = {
+        'chain': chain_data,
+        'length': len(chain_data),
+    }
+    return response
+
+@app.post("/nodes/register", response_model=RegisterNodesResponse, status_code=201)
+async def register_nodes(request: RegisterNodesRequest):
+    """
+    Registra nuovi nodi nella rete.
+    """
+    nodes = request.nodes
+    if not nodes:
+        raise HTTPException(status_code=400, detail="Fornire una lista valida di nodi")
+
+    for node_url in nodes:
+        node.register_node(node_url)
+
+    response = {
+        'message': 'Nuovi nodi aggiunti',
+        'total_nodes': list(node.nodes),
+    }
+    return response
+
+@app.get("/nodes/resolve", response_model=ResolveResponse)
+async def consensus():
+    """
+    Risolve i conflitti rimpiazzando la catena con la più lunga nella rete.
+    """
+    replaced = node.resolve_conflicts()
+
+    if replaced:
+        response = {
+            'message': 'La catena è stata sostituita',
+            'chain': node.blockchain.chain
+        }
+    else:
+        response = {
+            'message': 'La catena è autorevole',
+            'chain': node.blockchain.chain
+        }
+    return response
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--port', default=5000, type=int, help='Porta su cui ascoltare')
+    args = parser.parse_args()
+    
+    uvicorn.run(app, host="0.0.0.0", port=args.port)

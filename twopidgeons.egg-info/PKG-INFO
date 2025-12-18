@@ -7,3 +7,6 @@ Requires-Python: >=3.8
 Requires-Dist: Pillow
 Requires-Dist: cryptography
 Requires-Dist: requests
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: pydantic

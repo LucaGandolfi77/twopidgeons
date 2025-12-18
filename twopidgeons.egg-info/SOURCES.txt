@@ -2,12 +2,16 @@ README.md
 pyproject.toml
 setup.py
 tests/test_blockchain.py
+tests/test_crypto.py
+tests/test_merkle.py
 tests/test_node.py
 tests/test_utils.py
 twopidgeons/__init__.py
 twopidgeons/blockchain.py
 twopidgeons/cli.py
+twopidgeons/crypto_utils.py
 twopidgeons/extension.c
+twopidgeons/merkle_tree.py
 twopidgeons/node.py
 twopidgeons/server.py
 twopidgeons/steganography.py

@@ -13,7 +13,9 @@ dependencies = [
     "Pillow",
     "cryptography",
     "requests",
-    "flask",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
 ]
 requires-python = ">=3.8"
 
