@@ -16,6 +16,17 @@ class MerkleTree:
             # Return hash of empty string for empty block
             return hashlib.sha256(b"").hexdigest()
 
+        # Try to use C extension for performance
+        try:
+            from . import merkle_module
+            # Serialize transactions to strings for C module
+            tx_strings = [json.dumps(tx, sort_keys=True) for tx in transactions]
+            return merkle_module.compute_root(tx_strings)
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"Warning: Merkle C extension failed ({e}), falling back to Python.")
+
         hashes = [MerkleTree.hash_transaction(tx) for tx in transactions]
 
         while len(hashes) > 1:

@@ -16,6 +16,13 @@ module_pow = Extension(
     libraries=["crypto"]
 )
 
+# Define the Merkle Tree optimization module
+module_merkle = Extension(
+    "twopidgeons.merkle_module",
+    sources=["twopidgeons/merkle_module.c"],
+    libraries=["crypto"]
+)
+
 setup(
-    ext_modules=[module_c, module_pow]
+    ext_modules=[module_c, module_pow, module_merkle]
 )
