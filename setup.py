@@ -23,6 +23,12 @@ module_merkle = Extension(
     libraries=["crypto"]
 )
 
+# Define the Smart Contract VM module
+module_vm = Extension(
+    "twopidgeons.vm_module",
+    sources=["twopidgeons/vm_module.c"]
+)
+
 setup(
-    ext_modules=[module_c, module_pow, module_merkle]
+    ext_modules=[module_c, module_pow, module_merkle, module_vm]
 )
