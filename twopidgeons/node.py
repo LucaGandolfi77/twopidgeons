@@ -18,6 +18,7 @@ from collections import defaultdict
 from typing import Callable, List, Any, Optional
 
 from .config import Config, settings
+from .ipfs import IPFSClient
 
 class Node:
     def __init__(self, config: Config = settings):
@@ -27,6 +28,9 @@ class Node:
 
         self.storage_dir = config.storage_dir
         self.nodes = set(config.peers) 
+        
+        # Initialize IPFS Client
+        self.ipfs = IPFSClient(config.ipfs_api_url, config.ipfs_gateway_url)
         
         if not os.path.exists(self.storage_dir):
             os.makedirs(self.storage_dir)
@@ -230,21 +234,26 @@ class Node:
         # Encrypt the data using the node's public key (Hybrid Encryption)
         encrypted_data = encrypt_data_hybrid(clear_data, self.public_key)
         
-        # Save the ENCRYPTED data to the final .2pg file
-        dest_path = os.path.join(self.storage_dir, target_filename)
-        with open(dest_path, "wb") as f:
-            f.write(encrypted_data)
-            
         # Remove temp file
         os.remove(temp_path)
+
+        # 8. IPFS Storage (Replaces local disk storage)
+        print("Uploading encrypted image to IPFS...")
+        ipfs_cid = self.ipfs.add(encrypted_data)
+        if not ipfs_cid:
+            print("Error: Failed to upload to IPFS.")
+            return False
+            
+        print(f"Image uploaded to IPFS. CID: {ipfs_cid}")
         
-        # 8. Calculate hash of the ENCRYPTED file (Proof of Storage)
+        # 9. Calculate hash of the ENCRYPTED file (Proof of Storage)
         final_hash = calculate_hash(encrypted_data)
 
-        # 9. Blockchain Transaction Creation
+        # 10. Blockchain Transaction Creation
         transaction_data = {
             'node_id': self.node_id,
             'filename': target_filename,
+            'ipfs_cid': ipfs_cid,
             'image_hash': final_hash,
             'source_hash': img_hash,
             'timestamp': time.time(),
@@ -265,23 +274,21 @@ class Node:
         # After mining, broadcast the new block to the network
         self.broadcast_block(self.blockchain.last_block)
         
-        print(f"Image saved in {dest_path} (with steganography) and registered in block #{self.blockchain.last_block.index}")
+        print(f"Image stored on IPFS (CID: {ipfs_cid}) and registered in block #{self.blockchain.last_block.index}")
         return True
 
-    def validate_local_image(self, filename: str) -> bool:
+    def validate_image(self, cid: str) -> bool:
         """
-        Verifies if a local file is valid by checking the blockchain.
+        Verifies if an image on IPFS is valid by checking the blockchain.
         Also checks for steganographic signature (requires decryption).
         """
-        file_path = os.path.join(self.storage_dir, filename)
+        print(f"Fetching image from IPFS (CID: {cid})...")
+        encrypted_data = self.ipfs.get(cid)
         
-        if not os.path.exists(file_path):
-            print("File not found locally.")
+        if not encrypted_data:
+            print("Error: Could not retrieve image from IPFS.")
             return False
 
-        with open(file_path, "rb") as f:
-            encrypted_data = f.read()
-        
         # 1. Verify Hash of Encrypted File (Proof of Storage)
         current_hash = calculate_hash(encrypted_data)
         tx = self.blockchain.find_transaction(current_hash)
@@ -297,7 +304,7 @@ class Node:
             decrypted_data = decrypt_data_hybrid(encrypted_data, self.private_key)
             
             # Save to temp file to read EXIF
-            temp_path = file_path + ".temp.jpg"
+            temp_path = os.path.join(self.storage_dir, f"temp_validate_{cid}.jpg")
             with open(temp_path, "wb") as f:
                 f.write(decrypted_data)
                 
@@ -315,5 +322,14 @@ class Node:
             # But for now, we are the owner.
             
         return True
+
+    def get_cid_by_filename(self, filename: str) -> Optional[str]:
+        """Searches the blockchain for a transaction with the given filename."""
+        for block in reversed(self.blockchain.chain):
+            for tx in block.transactions:
+                if tx.get('filename') == filename:
+                    return tx.get('ipfs_cid')
+        return None
+
 
 import time

@@ -53,27 +53,46 @@ def main():
         cfg = get_config(args)
         cfg.node_id = "validator"
         node = Node(config=cfg)
-        node.validate_local_image(args.name)
+        
+        cid = args.name
+        # Try to resolve filename to CID if it doesn't look like a CID
+        if not (cid.startswith("Qm") or cid.startswith("bafy")):
+             resolved = node.get_cid_by_filename(args.name)
+             if resolved:
+                 print(f"Resolved filename '{args.name}' to CID: {resolved}")
+                 cid = resolved
+             else:
+                 print(f"Warning: '{args.name}' does not look like a CID and was not found in blockchain. Trying as CID anyway.")
+        
+        node.validate_image(cid)
 
     elif args.command == "inspect":
         # Inspect now needs to decrypt the file first
         cfg = get_config(args)
         cfg.node_id = "inspector"
         node = Node(config=cfg)
-        file_path = os.path.join(cfg.storage_dir, args.name)
         
-        if os.path.exists(file_path):
+        cid = args.name
+        if not (cid.startswith("Qm") or cid.startswith("bafy")):
+             resolved = node.get_cid_by_filename(args.name)
+             if resolved:
+                 print(f"Resolved filename '{args.name}' to CID: {resolved}")
+                 cid = resolved
+             else:
+                 print(f"Warning: '{args.name}' does not look like a CID and was not found in blockchain. Trying as CID anyway.")
+
+        print(f"Fetching from IPFS: {cid}")
+        encrypted_data = node.ipfs.get(cid)
+        
+        if encrypted_data:
             try:
                 from .crypto_utils import decrypt_data_hybrid
                 from .steganography import Steganography
                 
-                with open(file_path, "rb") as f:
-                    encrypted_data = f.read()
-                
                 print("Decrypting file...")
                 decrypted_data = decrypt_data_hybrid(encrypted_data, node.private_key)
                 
-                temp_path = file_path + ".temp.jpg"
+                temp_path = os.path.join(cfg.storage_dir, f"temp_inspect_{cid}.jpg")
                 with open(temp_path, "wb") as f:
                     f.write(decrypted_data)
                 
@@ -84,7 +103,7 @@ def main():
             except Exception as e:
                 print(f"Error inspecting file (Decryption failed?): {e}")
         else:
-            print("File not found.")
+            print("File not found on IPFS.")
 
     elif args.command == "serve":
         from .server import P2PServer

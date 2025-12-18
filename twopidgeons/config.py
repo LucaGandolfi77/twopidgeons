@@ -25,5 +25,9 @@ class Config(BaseModel):
     # Blockchain
     difficulty: int = Field(default_factory=lambda: int(os.getenv("TP_DIFFICULTY", "4")))
 
+    # IPFS
+    ipfs_api_url: str = Field(default_factory=lambda: os.getenv("TP_IPFS_API_URL", "http://127.0.0.1:5001/api/v0"))
+    ipfs_gateway_url: str = Field(default_factory=lambda: os.getenv("TP_IPFS_GATEWAY_URL", "http://127.0.0.1:8080/ipfs"))
+
 # Global instance (can be overridden)
 settings = Config()
