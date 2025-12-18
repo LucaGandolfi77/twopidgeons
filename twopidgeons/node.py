@@ -1,17 +1,114 @@
 import os
 import shutil
+import requests
+from urllib.parse import urlparse
 from PIL import Image
-from .blockchain import Blockchain
+from .blockchain import Blockchain, Block
 from .utils import is_valid_filename, calculate_hash
 
 class Node:
     def __init__(self, node_id: str, storage_dir: str):
         self.node_id = node_id
         self.storage_dir = storage_dir
-        self.blockchain = Blockchain()
+        self.nodes = set() # Insieme dei nodi peer (es. 'http://192.168.0.5:5000')
         
         if not os.path.exists(self.storage_dir):
             os.makedirs(self.storage_dir)
+            
+        # La blockchain viene salvata nella stessa directory del nodo
+        chain_path = os.path.join(self.storage_dir, "blockchain.json")
+        self.blockchain = Blockchain(chain_file=chain_path)
+
+    def register_node(self, address: str):
+        """Aggiunge un nuovo nodo alla lista dei peer."""
+        parsed_url = urlparse(address)
+        if parsed_url.netloc:
+            self.nodes.add(parsed_url.scheme + "://" + parsed_url.netloc)
+        elif parsed_url.path:
+            # Accetta anche indirizzi senza scheme (es. 'localhost:5000')
+            self.nodes.add("http://" + parsed_url.path)
+
+    def broadcast_block(self, block: Block):
+        """Invia un nuovo blocco a tutti i nodi conosciuti."""
+        print(f"Broadcasting block #{block.index} to peers...")
+        block_data = block.__dict__
+        for node in self.nodes:
+            try:
+                requests.post(f"{node}/block/receive", json=block_data, timeout=2)
+            except requests.RequestException:
+                print(f"Impossibile contattare il nodo {node}")
+
+    def receive_block(self, block_data: dict) -> bool:
+        """
+        Gestisce la ricezione di un blocco da un altro nodo.
+        Ritorna True se il blocco è stato accettato.
+        """
+        # Ricostruiamo l'oggetto Block
+        new_block = Block(
+            index=block_data['index'],
+            transactions=block_data['transactions'],
+            timestamp=block_data['timestamp'],
+            previous_hash=block_data['previous_hash']
+        )
+        
+        last_block = self.blockchain.last_block
+        
+        # Caso 1: Il blocco è il successivo esatto della nostra catena
+        if new_block.index == last_block.index + 1:
+            if Blockchain.is_valid_block(new_block, last_block):
+                self.blockchain.chain.append(new_block)
+                self.blockchain.save_chain()
+                print(f"Blocco #{new_block.index} ricevuto e aggiunto alla catena.")
+                return True
+        
+        # Caso 2: Il blocco è molto più avanti (siamo desincronizzati)
+        elif new_block.index > last_block.index + 1:
+            print("Ricevuto blocco futuro. La nostra catena è obsoleta. Risoluzione conflitti...")
+            self.resolve_conflicts()
+            
+        return False
+
+    def resolve_conflicts(self) -> bool:
+        """
+        Algoritmo di Consenso: risolve i conflitti sostituendo la catena
+        con la più lunga valida nella rete.
+        Ritorna True se la catena è stata sostituita, False altrimenti.
+        """
+        neighbours = self.nodes
+        new_chain = None
+        max_length = len(self.blockchain.chain)
+
+        for node in neighbours:
+            try:
+                response = requests.get(f'{node}/chain')
+                if response.status_code == 200:
+                    length = response.json()['length']
+                    chain_data = response.json()['chain']
+
+                    # Se troviamo una catena più lunga, verifichiamo la validità
+                    if length > max_length:
+                        # Ricostruiamo la catena di oggetti Block
+                        temp_chain = []
+                        for b_data in chain_data:
+                            block = Block(
+                                index=b_data['index'],
+                                transactions=b_data['transactions'],
+                                timestamp=b_data['timestamp'],
+                                previous_hash=b_data['previous_hash']
+                            )
+                            temp_chain.append(block)
+                        
+                        if Blockchain.is_valid_chain(temp_chain):
+                            max_length = length
+                            new_chain = temp_chain
+            except requests.RequestException:
+                continue
+
+        if new_chain:
+            self.blockchain.replace_chain(new_chain)
+            return True
+
+        return False
 
     def store_image(self, source_path: str, target_filename: str) -> bool:
         """
@@ -66,6 +163,9 @@ class Node:
         
         self.blockchain.add_new_transaction(transaction)
         self.blockchain.mine()
+        
+        # Dopo aver minato, diffondiamo il nuovo blocco alla rete
+        self.broadcast_block(self.blockchain.last_block)
         
         print(f"Immagine salvata in {dest_path} e registrata nel blocco #{self.blockchain.last_block.index}")
         return True
