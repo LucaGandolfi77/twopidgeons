@@ -40,11 +40,31 @@ def main():
         node.validate_local_image(args.name)
 
     elif args.command == "inspect":
-        from .steganography import Steganography
+        # Inspect now needs to decrypt the file first
+        node = Node(node_id="inspector", storage_dir=args.node_dir)
         file_path = os.path.join(args.node_dir, args.name)
+        
         if os.path.exists(file_path):
-            data = Steganography.extract(file_path)
-            print(f"Hidden Data: {data}")
+            try:
+                from .crypto_utils import decrypt_data_hybrid
+                from .steganography import Steganography
+                
+                with open(file_path, "rb") as f:
+                    encrypted_data = f.read()
+                
+                print("Decrypting file...")
+                decrypted_data = decrypt_data_hybrid(encrypted_data, node.private_key)
+                
+                temp_path = file_path + ".temp.jpg"
+                with open(temp_path, "wb") as f:
+                    f.write(decrypted_data)
+                
+                data = Steganography.extract(temp_path)
+                print(f"Hidden Data: {data}")
+                
+                os.remove(temp_path)
+            except Exception as e:
+                print(f"Error inspecting file (Decryption failed?): {e}")
         else:
             print("File not found.")
 

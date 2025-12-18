@@ -1,6 +1,7 @@
 import os
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 import base64
 
@@ -91,3 +92,58 @@ def verify_signature(public_key, data: bytes, signature_b64: str) -> bool:
         return True
     except Exception:
         return False
+
+def encrypt_data_hybrid(data: bytes, public_key) -> bytes:
+    """Encrypts data using AES-GCM and encrypts the AES key with RSA."""
+    # 1. Generate AES Key (32 bytes for AES-256)
+    aes_key = os.urandom(32)
+    iv = os.urandom(12) # GCM nonce
+
+    # 2. Encrypt data with AES-GCM
+    encryptor = Cipher(
+        algorithms.AES(aes_key),
+        modes.GCM(iv),
+        backend=default_backend()
+    ).encryptor()
+    ciphertext = encryptor.update(data) + encryptor.finalize()
+    
+    # 3. Encrypt AES Key with RSA Public Key
+    encrypted_key = public_key.encrypt(
+        aes_key,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    
+    # Format: [Key Length (4 bytes)][Encrypted Key][IV (12 bytes)][Tag (16 bytes)][Ciphertext]
+    return len(encrypted_key).to_bytes(4, 'big') + encrypted_key + iv + encryptor.tag + ciphertext
+
+def decrypt_data_hybrid(data: bytes, private_key) -> bytes:
+    """Decrypts data using Hybrid Encryption (RSA + AES-GCM)."""
+    # Parse format
+    key_len = int.from_bytes(data[:4], 'big')
+    encrypted_key = data[4:4+key_len]
+    iv = data[4+key_len:4+key_len+12]
+    tag = data[4+key_len+12:4+key_len+12+16]
+    ciphertext = data[4+key_len+12+16:]
+    
+    # Decrypt AES Key
+    aes_key = private_key.decrypt(
+        encrypted_key,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    
+    # Decrypt Data
+    decryptor = Cipher(
+        algorithms.AES(aes_key),
+        modes.GCM(iv, tag),
+        backend=default_backend()
+    ).decryptor()
+    
+    return decryptor.update(ciphertext) + decryptor.finalize()

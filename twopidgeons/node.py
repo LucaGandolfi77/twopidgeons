@@ -9,8 +9,10 @@ from .utils import is_valid_filename, calculate_hash
 from .steganography import Steganography
 from .crypto_utils import (
     generate_keys, save_key_to_file, load_private_key_from_file, 
-    load_public_key_from_file, serialize_public_key, sign_data
+    load_public_key_from_file, serialize_public_key, sign_data,
+    encrypt_data_hybrid, decrypt_data_hybrid
 )
+import time
 
 class Node:
     def __init__(self, node_id: str, storage_dir: str):
@@ -163,23 +165,36 @@ class Node:
             print("Error: This image is already registered in the blockchain.")
             return False
 
-        # 5. Physical file saving
-        dest_path = os.path.join(self.storage_dir, target_filename)
-        # Rewrite the file to ensure it is a valid JPEG renamed to .2pg
+        # 5. Physical file saving (Temp)
+        temp_path = os.path.join(self.storage_dir, "temp_" + target_filename)
+        # Rewrite the file to ensure it is a valid JPEG
         with Image.open(source_path) as img:
-            img.convert('RGB').save(dest_path, format='JPEG')
+            img.convert('RGB').save(temp_path, format='JPEG')
             
         # 6. Steganography: Embed Node ID and Timestamp into the image
-        # We do this BEFORE calculating the final hash, so the hash includes the hidden data.
         hidden_data = f"Origin: {self.node_id} | Time: {time.time()}"
-        Steganography.embed(dest_path, hidden_data)
+        Steganography.embed(temp_path, hidden_data)
         
-        # 7. Recalculate hash of the actually saved file (with steganography)
-        with open(dest_path, "rb") as f:
-            final_data = f.read()
-        final_hash = calculate_hash(final_data)
+        # 7. Encryption
+        # Read the cleartext image data (with steganography)
+        with open(temp_path, "rb") as f:
+            clear_data = f.read()
+            
+        # Encrypt the data using the node's public key (Hybrid Encryption)
+        encrypted_data = encrypt_data_hybrid(clear_data, self.public_key)
+        
+        # Save the ENCRYPTED data to the final .2pg file
+        dest_path = os.path.join(self.storage_dir, target_filename)
+        with open(dest_path, "wb") as f:
+            f.write(encrypted_data)
+            
+        # Remove temp file
+        os.remove(temp_path)
+        
+        # 8. Calculate hash of the ENCRYPTED file (Proof of Storage)
+        final_hash = calculate_hash(encrypted_data)
 
-        # 8. Blockchain Transaction Creation
+        # 9. Blockchain Transaction Creation
         transaction_data = {
             'node_id': self.node_id,
             'filename': target_filename,
@@ -208,7 +223,7 @@ class Node:
     def validate_local_image(self, filename: str) -> bool:
         """
         Verifies if a local file is valid by checking the blockchain.
-        Also checks for steganographic signature.
+        Also checks for steganographic signature (requires decryption).
         """
         file_path = os.path.join(self.storage_dir, filename)
         
@@ -216,25 +231,41 @@ class Node:
             print("File not found locally.")
             return False
 
-        # Check Steganography
-        hidden_msg = Steganography.extract(file_path)
-        if hidden_msg:
-            print(f"Steganography found: {hidden_msg}")
-        else:
-            print("Warning: No steganographic data found.")
-
         with open(file_path, "rb") as f:
-            data = f.read()
+            encrypted_data = f.read()
         
-        current_hash = calculate_hash(data)
-        
+        # 1. Verify Hash of Encrypted File (Proof of Storage)
+        current_hash = calculate_hash(encrypted_data)
         tx = self.blockchain.find_transaction(current_hash)
         
-        if tx:
-            print(f"Validation OK: Authentic image registered by node {tx['node_id']}.")
-            return True
-        else:
+        if not tx:
             print("Validation FAILED: Image hash not found in the blockchain.")
             return False
+            
+        print(f"Validation OK: Authentic image registered by node {tx['node_id']}.")
+
+        # 2. Decrypt and Check Steganography
+        try:
+            decrypted_data = decrypt_data_hybrid(encrypted_data, self.private_key)
+            
+            # Save to temp file to read EXIF
+            temp_path = file_path + ".temp.jpg"
+            with open(temp_path, "wb") as f:
+                f.write(decrypted_data)
+                
+            hidden_msg = Steganography.extract(temp_path)
+            if hidden_msg:
+                print(f"Steganography found (Decrypted): {hidden_msg}")
+            else:
+                print("Warning: No steganographic data found in decrypted image.")
+                
+            os.remove(temp_path)
+        except Exception as e:
+            print(f"Decryption/Steganography check failed: {e}")
+            # We return True because the file IS valid on blockchain, just maybe we can't read it
+            # or it wasn't encrypted for us (if we implement sharing later).
+            # But for now, we are the owner.
+            
+        return True
 
 import time
